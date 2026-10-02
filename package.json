@@ -1,15 +1,15 @@
 {
   "name": "serpkite",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official TypeScript/JavaScript SDK for SerpKite, the Google search API built for AI agents: clean JSON or Markdown results.",
   "license": "MIT",
   "author": "SerpKite",
   "homepage": "https://serpkite.com/docs",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/serpkite/serpkite-js.git"
+    "url": "git+https://github.com/SerpKite/serpkite-js.git"
   },
-  "bugs": "https://github.com/serpkite/serpkite-js/issues",
+  "bugs": "https://github.com/SerpKite/serpkite-js/issues",
   "keywords": [
     "serpkite",
     "google",
