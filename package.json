@@ -1,0 +1,63 @@
+{
+  "name": "serpkite",
+  "version": "0.1.0",
+  "description": "Official TypeScript/JavaScript SDK for SerpKite, the Google search API built for AI agents: clean JSON or Markdown results.",
+  "license": "MIT",
+  "author": "SerpKite",
+  "homepage": "https://serpkite.com/docs",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/serpkite/serpkite-js.git"
+  },
+  "bugs": "https://github.com/serpkite/serpkite-js/issues",
+  "keywords": [
+    "serpkite",
+    "google",
+    "search",
+    "serp",
+    "api",
+    "ai",
+    "agents",
+    "llm",
+    "markdown"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "gen": "bun scripts/gen.ts",
+    "build": "tsup",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "bun run build"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.0",
+    "openapi-typescript": "^7.13.0",
+    "tsup": "^8.5.0",
+    "typescript": "^6.0.3"
+  }
+}

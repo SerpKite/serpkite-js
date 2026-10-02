@@ -1,0 +1,24 @@
+# Mirrored from the SerpKite monorepo (sdks/typescript); edits here are overwritten.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun install
+      - name: Generated types are up to date
+        run: bun run gen && git diff --exit-code -- src/generated
+      - run: bun run typecheck
+      - run: bun test
+      - run: bun run build
