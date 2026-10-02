@@ -51,7 +51,6 @@ const searchBody: SearchResponse = {
   results: [
     { position: 1, title: "Espresso", link: "https://example.com/", domain: "example.com" },
   ],
-  ai_overview: null,
   related_searches: [],
   meta: { request_id: "req_1", credits_used: 1, cached: false },
 };
@@ -140,7 +139,6 @@ describe("SerpKite", () => {
     await sk.patents({ q: "a" });
     await sk.autocomplete({ q: "a" });
     await sk.lens({ url: "https://example.com/a.jpg" });
-    await sk.aiMode({ q: "a" });
     await sk.webpage({ url: "https://example.com" });
     await sk.rank({ q: "a", domain: "example.com", num: 50 });
     await sk.account();
@@ -157,14 +155,13 @@ describe("SerpKite", () => {
       "POST /v1/patents",
       "POST /v1/autocomplete",
       "POST /v1/lens",
-      "POST /v1/ai-mode",
       "POST /v1/webpage",
       "POST /v1/rank",
       "GET /v1/account",
       "GET /v1/batches/b1",
     ]);
-    expect(m.seen[14].body).toBeUndefined();
-    expect(m.seen[14].headers.get("content-type")).toBeNull();
+    expect(m.seen[13].body).toBeUndefined();
+    expect(m.seen[13].headers.get("content-type")).toBeNull();
   });
 
   test("engine accepts a provider list and meta.route is typed", async () => {

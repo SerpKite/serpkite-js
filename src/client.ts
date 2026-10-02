@@ -1,7 +1,6 @@
 import { errorFromResponse, SerpKiteError } from "./errors";
 import type {
   Account,
-  AIModeResponse,
   AutocompleteResponse,
   Batch,
   BatchCreateEntry,
@@ -27,7 +26,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.1.1";
+export const VERSION = "0.2.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -150,7 +149,7 @@ export class SerpKite {
 
   // ── Verticals ─────────────────────────────────────────────────────────
 
-  /** Google web search: organic results, AI Overview, answer box, knowledge graph, people also ask… */
+  /** Google web search: organic results, answer box, knowledge graph, people also ask… */
   readonly search = this.#vertical<SearchParams, SearchResponse>("/v1/search");
   /** Google Images. */
   readonly images = this.#vertical<SearchParams, ImagesResponse>("/v1/images");
@@ -172,8 +171,6 @@ export class SerpKite {
   readonly patents = this.#vertical<SearchParams, PatentsResponse>("/v1/patents");
   /** Google autocomplete suggestions. */
   readonly autocomplete = this.#vertical<SearchParams, AutocompleteResponse>("/v1/autocomplete");
-  /** Google AI Mode answer with cited sources. */
-  readonly aiMode = this.#vertical<SearchParams, AIModeResponse>("/v1/ai-mode");
   /** Fetch any public URL as clean Markdown plus metadata. */
   readonly webpage = this.#vertical<WebpageParams, WebpageResponse>("/v1/webpage");
 

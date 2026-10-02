@@ -89,7 +89,7 @@ export interface paths {
         /** Same as POST /v1/search with query-string parameters */
         get: operations["searchGet"];
         put?: never;
-        /** Google web search (organic results, AI Overview, knowledge graph, answer box, people also ask, top stories, local pack…) */
+        /** Google web search (organic results, knowledge graph, answer box, people also ask, top stories, local pack…) */
         post: operations["search"];
         delete?: never;
         options?: never;
@@ -284,23 +284,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ai-mode": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Google AI Mode answer with citations (3 credits) */
-        post: operations["aiMode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/webpage": {
         parameters: {
             query?: never;
@@ -466,7 +449,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, scholar, webpage, ai_overview */
+        /** Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, scholar, webpage */
         post: operations["mcp"];
         delete?: never;
         options?: never;
@@ -552,15 +535,13 @@ export interface components {
              * @enum {string}
              */
             format?: "json" | "markdown" | "compact";
-            /** @description Comma-separated projection, e.g. "results.title,results.link,ai_overview" */
+            /** @description Comma-separated projection, e.g. "results.title,results.link,knowledge_graph" */
             fields?: string;
             /**
              * @description Also fetch the top N organic pages as Markdown (+1 credit each fetched page)
              * @default 0
              */
             include_content?: number;
-            /** @default true */
-            ai_overview?: boolean;
             /**
              * @description Include sponsored results
              * @default false
@@ -664,7 +645,7 @@ export interface components {
             /**
              * @example search
              * @example news
-             * @example ai-mode
+             * @example lens
              */
             endpoint: string;
             /** @description The engine policy as asked (google, auto, one provider or a list) */
@@ -722,17 +703,6 @@ export interface components {
              */
             sources?: components["schemas"]["Provider"][];
         };
-        Reference: {
-            title?: string;
-            link: string;
-            domain?: string;
-            snippet?: string;
-        };
-        AIOverview: {
-            text?: string;
-            markdown?: string;
-            references?: components["schemas"]["Reference"][];
-        };
         AnswerBox: {
             title?: string;
             answer?: string;
@@ -764,7 +734,6 @@ export interface components {
         SearchResponse: {
             request: components["schemas"]["RequestEcho"];
             results: components["schemas"]["OrganicResult"][];
-            ai_overview: components["schemas"]["AIOverview"] | null;
             answer_box?: components["schemas"]["AnswerBox"];
             knowledge_graph?: components["schemas"]["KnowledgeGraph"];
             ads?: components["schemas"]["OrganicResult"][];
@@ -951,14 +920,6 @@ export interface components {
             results: components["schemas"]["LensResult"][];
             meta: components["schemas"]["Meta"];
         };
-        AIModeResponse: {
-            request: components["schemas"]["RequestEcho"];
-            answer: string;
-            markdown?: string;
-            /** @description Cited sources */
-            results: components["schemas"]["Reference"][];
-            meta: components["schemas"]["Meta"];
-        };
         PageMetadata: {
             title?: string;
             description?: string;
@@ -1061,7 +1022,7 @@ export interface components {
         };
         BatchCreateRequest: {
             /** @enum {string} */
-            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "lens" | "ai-mode" | "webpage";
+            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "lens" | "webpage";
             /** @description Request bodies for `endpoint` (same fields as the realtime endpoint) */
             requests: {
                 [key: string]: unknown;
@@ -1322,22 +1283,6 @@ export interface components {
             };
         };
         /** @description OK (text/markdown when format=markdown) */
-        AIModeOK: {
-            headers: {
-                "X-Credits-Used": components["headers"]["CreditsUsed"];
-                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
-                "X-Cost-USD": components["headers"]["CostUSD"];
-                "X-Cache": components["headers"]["Cache"];
-                "X-Latency-Ms": components["headers"]["LatencyMs"];
-                "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["AIModeResponse"];
-                "text/markdown": string;
-            };
-        };
-        /** @description OK (text/markdown when format=markdown) */
         WebpageOK: {
             headers: {
                 "X-Credits-Used": components["headers"]["CreditsUsed"];
@@ -1395,7 +1340,6 @@ export interface operations {
                 format?: string;
                 fields?: string;
                 include_content?: number;
-                ai_overview?: boolean;
                 ads?: boolean;
                 max_age?: number;
                 /** @description google (default), auto, consensus, one provider, or a comma-separated list (e.g. google,brave) */
@@ -1633,24 +1577,6 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["LensOK"];
-            400: components["responses"]["Error"];
-            401: components["responses"]["Error"];
-            402: components["responses"]["Error"];
-            403: components["responses"]["Error"];
-            429: components["responses"]["Error"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    aiMode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: components["requestBodies"]["Search"];
-        responses: {
-            200: components["responses"]["AIModeOK"];
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             402: components["responses"]["Error"];

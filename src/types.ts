@@ -28,7 +28,7 @@ export type RouteOutcome = RouteStep["outcome"];
 
 // ── Requests ────────────────────────────────────────────────────────────
 
-/** Parameters for search, images, videos, news, maps, places, shopping, scholar, patents, autocomplete and aiMode. */
+/** Parameters for search, images, videos, news, maps, places, shopping, scholar, patents and autocomplete. */
 export type SearchParams = Omit<Schemas["SearchRequest"], "engine"> & {
   /** Search providers allowed to answer. Default `"google"`. See {@link Engine}. */
   engine?: Engine;
@@ -51,8 +51,6 @@ export type ErrorBody = Schemas["Error"];
 
 export type OrganicResult = Schemas["OrganicResult"];
 export type Sitelink = Schemas["Sitelink"];
-export type Reference = Schemas["Reference"];
-export type AIOverview = Schemas["AIOverview"];
 export type AnswerBox = Schemas["AnswerBox"];
 export type KnowledgeGraph = Schemas["KnowledgeGraph"];
 export type PeopleAlsoAsk = Schemas["PeopleAlsoAsk"];
@@ -85,7 +83,6 @@ export type ScholarResponse = Schemas["ScholarResponse"];
 export type PatentsResponse = Schemas["PatentsResponse"];
 export type AutocompleteResponse = Schemas["AutocompleteResponse"];
 export type LensResponse = Schemas["LensResponse"];
-export type AIModeResponse = Schemas["AIModeResponse"];
 export type WebpageResponse = Schemas["WebpageResponse"];
 export type RankResponse = Schemas["RankResponse"];
 export type Account = Schemas["Account"];
@@ -129,7 +126,6 @@ type BatchRequestMap = {
   patents: SearchParams;
   autocomplete: SearchParams;
   lens: LensParams;
-  "ai-mode": SearchParams;
   webpage: WebpageParams;
 };
 

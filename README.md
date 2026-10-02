@@ -81,7 +81,7 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 
 | Method | Endpoint | Params | Returns |
 | --- | --- | --- | --- |
-| `search(params)` | `POST /v1/search` | `SearchParams` | `SearchResponse` (results, `ai_overview`, `answer_box`, `knowledge_graph`, `people_also_ask`, `related_searches`, `top_stories`, `places`, `ads`) |
+| `search(params)` | `POST /v1/search` | `SearchParams` | `SearchResponse` (results, `answer_box`, `knowledge_graph`, `people_also_ask`, `related_searches`, `top_stories`, `places`, `ads`) |
 | `images(params)` | `POST /v1/images` | `SearchParams` | `ImagesResponse` |
 | `videos(params)` | `POST /v1/videos` | `SearchParams` | `VideosResponse` |
 | `news(params)` | `POST /v1/news` | `SearchParams` | `NewsResponse` |
@@ -93,7 +93,6 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `patents(params)` | `POST /v1/patents` | `SearchParams` | `PatentsResponse` |
 | `autocomplete(params)` | `POST /v1/autocomplete` | `SearchParams` | `AutocompleteResponse` (`results[].value`) |
 | `lens(params)` | `POST /v1/lens` | `LensParams` (`url` of an image) | `LensResponse` |
-| `aiMode(params)` | `POST /v1/ai-mode` | `SearchParams` | `AIModeResponse` (`answer`, `markdown`, cited `results`) |
 | `webpage(params)` | `POST /v1/webpage` | `WebpageParams` (`url`, `include_html`) | `WebpageResponse` (`markdown`, `text`, `metadata`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
 | `account()` | `GET /v1/account` | none | `Account` (`balance`, `plan`, `rate_limit_rps`, `month`, …) |
@@ -104,8 +103,8 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 Common `SearchParams`: `q` (required), `country` (default `us`), `language` (default `en`),
 `location`, `uule`, `num` (10, or 100 for the depth bundle), `page` (1-10), `time`
 (`hour`|`day`|`week`|`month`|`year`), `tbs`, `device` (`desktop`|`mobile`), `safe`, `autocorrect`,
-`format` (`json`|`markdown`|`compact`), `fields`, `include_content` (0-5), `ai_overview`, `ads`,
-`max_age`, `engine`.
+`format` (`json`|`markdown`|`compact`), `fields`, `include_content` (0-5), `ads`, `max_age`,
+`engine`.
 
 ### Examples
 
@@ -118,7 +117,7 @@ const deep = await sk.search({ q: "rust async runtime comparison", include_conte
 console.log(deep.results[0].content);
 
 // Only the fields you need
-const lean = await sk.search({ q: "espresso", fields: "results.title,results.link,ai_overview" });
+const lean = await sk.search({ q: "espresso", fields: "results.title,results.link,answer_box" });
 
 // Token-lean JSON for agents
 const compact = await sk.search({ q: "espresso", format: "compact" });
@@ -184,7 +183,7 @@ import { isBatchError, SerpKite } from "serpkite";
 
 const sk = new SerpKite();
 const { batches } = await sk.batches.create({
-  endpoint: "search", // or images, news, maps, reviews, ai-mode, webpage, …
+  endpoint: "search", // or images, news, maps, reviews, webpage, …
   requests: [{ q: "a" }, { q: "b" }],
   webhook_url: "https://example.com/hooks/serpkite", // optional
 });
@@ -255,9 +254,9 @@ are never retried. `batches.create` retries only on `429`, so a lost response ca
 
 Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `openapi-typescript`. Friendly aliases are exported: `SearchParams`, `SearchResponse`,
-`OrganicResult`, `AIOverview`, `NewsResponse`, `NewsResult`, `ImagesResponse`, `PlacesResponse`,
+`OrganicResult`, `AnswerBox`, `NewsResponse`, `NewsResult`, `ImagesResponse`, `PlacesResponse`,
 `ReviewsResponse`, `ShoppingResponse`, `ScholarResponse`, `PatentsResponse`,
-`AutocompleteResponse`, `LensResponse`, `AIModeResponse`, `WebpageResponse`, `RankResponse`,
+`AutocompleteResponse`, `LensResponse`, `WebpageResponse`, `RankResponse`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse` and more. The raw
 `paths`, `components` and `operations` types are exported as well.
