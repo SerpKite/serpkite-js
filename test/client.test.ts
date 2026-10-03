@@ -136,12 +136,13 @@ describe("SerpKite", () => {
     await sk.reviews({ place_id: "ChIJ", sort: "newest" });
     await sk.shopping({ q: "a" });
     await sk.scholar({ q: "a" });
-    await sk.patents({ q: "a" });
+    await sk.patents({ q: "двигатель", country: "ru", language: "ru" });
     await sk.autocomplete({ q: "a" });
     await sk.webpage({ url: "https://example.com" });
     await sk.rank({ q: "a", domain: "example.com", num: 50 });
     await sk.account();
     await sk.batches.get("b1");
+    expect(m.seen[8].body).toEqual({ q: "двигатель", country: "ru", language: "ru" });
     expect(m.seen.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual([
       "POST /v1/images",
       "POST /v1/videos",

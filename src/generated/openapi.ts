@@ -726,12 +726,12 @@ export interface components {
         SearchRequest: {
             q: string;
             /**
-             * @description Country code (ISO 3166-1 alpha-2, case-insensitive; uk is accepted as gb). When omitted and location ends in a country name, that country is used
+             * @description Country code (ISO 3166-1 alpha-2, case-insensitive; uk is accepted as gb). When omitted and location ends in a country name, that country is used. Russia (ru) uses isolated Russian proxy exits across all search verticals, including patents; those exits never serve other countries
              * @default us
              */
             country?: string;
             /**
-             * @description Interface language: a language code with an optional region (e.g. en, de, pt-br, zh-tw, es-419)
+             * @description Interface language: a language code with an optional region (e.g. en, ru, de, pt-br, zh-tw, es-419). Russian (ru) is supported across all search verticals; language does not change the selected country. On patents, a non-English code restricts publication language (ar, zh, da, nl, fi, fr, de, it, ja, ko, no, pt, ru, es, sv)
              * @default en
              */
             language?: string;
