@@ -24,7 +24,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.2.0";
+export const VERSION = "0.3.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
