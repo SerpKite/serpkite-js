@@ -157,7 +157,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,zoomz") */
+        /** Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,zoomz") to search around a point */
         post: operations["maps"];
         delete?: never;
         options?: never;
@@ -472,20 +472,20 @@ export interface components {
         SearchRequest: {
             q: string;
             /**
-             * @description Country code (ISO 3166-1 alpha-2)
+             * @description Country code (ISO 3166-1 alpha-2, case-insensitive; uk is accepted as gb). When omitted and location ends in a country name, that country is used
              * @default us
              */
             country?: string;
             /**
-             * @description Interface language (e.g. en
+             * @description Interface language: a language code with an optional region (e.g. en, de, pt-br, zh-tw, es-419)
              * @default en
              */
             language?: string;
             /** @description Free-text location, e.g. "Austin, Texas, United States" */
             location?: string;
-            /** @description Pre-encoded Google location (overrides location) */
+            /** @description Pre-encoded Google location (overrides ll and location; percent-encoded values are decoded) */
             uule?: string;
-            /** @description Maps viewport "@lat,lng,14z" (maps only) */
+            /** @description Map point "@lat,lng,14z" (maps and places only; zoom optional): the search runs as a searcher at that point. Overrides location */
             ll?: string;
             /**
              * @description 10, or up to 100 for the depth bundle on search and news (7 credits for 100; values between round up to whole pages). Other verticals return one page of 10
@@ -495,11 +495,11 @@ export interface components {
             /** @default 1 */
             page?: number;
             /**
-             * @description Only results from the last hour/day/…
+             * @description Only results from the last hour/day/… (search, news, images, videos, shopping). A fallback engine without that window is skipped, never answered unfiltered
              * @enum {string}
              */
             time?: "hour" | "day" | "week" | "month" | "year";
-            /** @description Advanced: raw Google tbs filter (e.g. qdr:d); overrides time */
+            /** @description Advanced: raw Google tbs filter (e.g. qdr:d, qdr:w2, cdr:1,cd_min:1/1/2026,cd_max:1/31/2026); overrides time */
             tbs?: string;
             /**
              * @default desktop
