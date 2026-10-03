@@ -138,7 +138,6 @@ describe("SerpKite", () => {
     await sk.scholar({ q: "a" });
     await sk.patents({ q: "a" });
     await sk.autocomplete({ q: "a" });
-    await sk.lens({ url: "https://example.com/a.jpg" });
     await sk.webpage({ url: "https://example.com" });
     await sk.rank({ q: "a", domain: "example.com", num: 50 });
     await sk.account();
@@ -154,14 +153,13 @@ describe("SerpKite", () => {
       "POST /v1/scholar",
       "POST /v1/patents",
       "POST /v1/autocomplete",
-      "POST /v1/lens",
       "POST /v1/webpage",
       "POST /v1/rank",
       "GET /v1/account",
       "GET /v1/batches/b1",
     ]);
-    expect(m.seen[13].body).toBeUndefined();
-    expect(m.seen[13].headers.get("content-type")).toBeNull();
+    expect(m.seen[12].body).toBeUndefined();
+    expect(m.seen[12].headers.get("content-type")).toBeNull();
   });
 
   test("engine accepts a provider list and meta.route is typed", async () => {

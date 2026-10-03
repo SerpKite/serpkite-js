@@ -92,7 +92,6 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `scholar(params)` | `POST /v1/scholar` | `SearchParams` | `ScholarResponse` |
 | `patents(params)` | `POST /v1/patents` | `SearchParams` | `PatentsResponse` |
 | `autocomplete(params)` | `POST /v1/autocomplete` | `SearchParams` | `AutocompleteResponse` (`results[].value`) |
-| `lens(params)` | `POST /v1/lens` | `LensParams` (`url` of an image) | `LensResponse` |
 | `webpage(params)` | `POST /v1/webpage` | `WebpageParams` (`url`, `include_html`) | `WebpageResponse` (`markdown`, `text`, `metadata`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
 | `account()` | `GET /v1/account` | none | `Account` (`balance`, `plan`, `rate_limit_rps`, `month`, …) |
@@ -256,7 +255,7 @@ Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `openapi-typescript`. Friendly aliases are exported: `SearchParams`, `SearchResponse`,
 `OrganicResult`, `AnswerBox`, `NewsResponse`, `NewsResult`, `ImagesResponse`, `PlacesResponse`,
 `ReviewsResponse`, `ShoppingResponse`, `ScholarResponse`, `PatentsResponse`,
-`AutocompleteResponse`, `LensResponse`, `WebpageResponse`, `RankResponse`,
+`AutocompleteResponse`, `WebpageResponse`, `RankResponse`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse` and more. The raw
 `paths`, `components` and `operations` types are exported as well.

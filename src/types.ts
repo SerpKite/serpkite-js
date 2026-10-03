@@ -34,7 +34,6 @@ export type SearchParams = Omit<Schemas["SearchRequest"], "engine"> & {
   engine?: Engine;
 };
 export type ReviewsParams = Schemas["ReviewsRequest"];
-export type LensParams = Schemas["LensRequest"];
 export type WebpageParams = Schemas["WebpageRequest"];
 export type RankParams = Schemas["RankRequest"];
 
@@ -64,7 +63,6 @@ export type ShoppingResult = Schemas["ShoppingResult"];
 export type ScholarResult = Schemas["ScholarResult"];
 export type PatentResult = Schemas["PatentResult"];
 export type Suggestion = Schemas["Suggestion"];
-export type LensResult = Schemas["LensResult"];
 export type PageMetadata = Schemas["PageMetadata"];
 export type RankMatch = Schemas["RankResponse"]["matches"][number];
 
@@ -82,7 +80,6 @@ export type ShoppingResponse = Schemas["ShoppingResponse"];
 export type ScholarResponse = Schemas["ScholarResponse"];
 export type PatentsResponse = Schemas["PatentsResponse"];
 export type AutocompleteResponse = Schemas["AutocompleteResponse"];
-export type LensResponse = Schemas["LensResponse"];
 export type WebpageResponse = Schemas["WebpageResponse"];
 export type RankResponse = Schemas["RankResponse"];
 export type Account = Schemas["Account"];
@@ -125,7 +122,6 @@ type BatchRequestMap = {
   scholar: SearchParams;
   patents: SearchParams;
   autocomplete: SearchParams;
-  lens: LensParams;
   webpage: WebpageParams;
 };
 

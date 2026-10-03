@@ -8,8 +8,6 @@ import type {
   BatchCreateResponse,
   CompactResponse,
   ImagesResponse,
-  LensParams,
-  LensResponse,
   NewsResponse,
   PatentsResponse,
   PlacesResponse,
@@ -173,11 +171,6 @@ export class SerpKite {
   readonly autocomplete = this.#vertical<SearchParams, AutocompleteResponse>("/v1/autocomplete");
   /** Fetch any public URL as clean Markdown plus metadata. */
   readonly webpage = this.#vertical<WebpageParams, WebpageResponse>("/v1/webpage");
-
-  /** Google Lens visual matches for an image URL. */
-  lens(params: LensParams, options?: RequestOptions): Promise<LensResponse> {
-    return this.request({ method: "POST", path: "/v1/lens", body: params, options });
-  }
 
   /** Position of `domain` for keyword `q` in the top `num` results (default 100). */
   rank(params: RankParams, options?: RequestOptions): Promise<RankResponse> {

@@ -267,23 +267,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/lens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Google Lens visual matches for an image URL (2 credits) */
-        post: operations["lens"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/webpage": {
         parameters: {
             query?: never;
@@ -575,19 +558,6 @@ export interface components {
             fields?: string;
             max_age?: number;
         };
-        LensRequest: {
-            /**
-             * Format: uri
-             * @description Image URL
-             */
-            url: string;
-            country?: string;
-            language?: string;
-            /** @enum {string} */
-            format?: "json" | "markdown" | "compact";
-            fields?: string;
-            max_age?: number;
-        };
         WebpageRequest: {
             /** Format: uri */
             url: string;
@@ -645,7 +615,7 @@ export interface components {
             /**
              * @example search
              * @example news
-             * @example lens
+             * @example webpage
              */
             endpoint: string;
             /** @description The engine policy as asked (google, auto, one provider or a list) */
@@ -906,20 +876,6 @@ export interface components {
             results: components["schemas"]["Suggestion"][];
             meta: components["schemas"]["Meta"];
         };
-        LensResult: {
-            position: number;
-            title: string;
-            source?: string;
-            link: string;
-            domain?: string;
-            image_url?: string;
-            thumbnail_url?: string;
-        };
-        LensResponse: {
-            request: components["schemas"]["RequestEcho"];
-            results: components["schemas"]["LensResult"][];
-            meta: components["schemas"]["Meta"];
-        };
         PageMetadata: {
             title?: string;
             description?: string;
@@ -1022,7 +978,7 @@ export interface components {
         };
         BatchCreateRequest: {
             /** @enum {string} */
-            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "lens" | "webpage";
+            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "webpage";
             /** @description Request bodies for `endpoint` (same fields as the realtime endpoint) */
             requests: {
                 [key: string]: unknown;
@@ -1263,22 +1219,6 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["AutocompleteResponse"];
-                "text/markdown": string;
-            };
-        };
-        /** @description OK (text/markdown when format=markdown) */
-        LensOK: {
-            headers: {
-                "X-Credits-Used": components["headers"]["CreditsUsed"];
-                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
-                "X-Cost-USD": components["headers"]["CostUSD"];
-                "X-Cache": components["headers"]["Cache"];
-                "X-Latency-Ms": components["headers"]["LatencyMs"];
-                "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
-                [name: string]: unknown;
-            };
-            content: {
-                "application/json": components["schemas"]["LensResponse"];
                 "text/markdown": string;
             };
         };
@@ -1555,28 +1495,6 @@ export interface operations {
         requestBody: components["requestBodies"]["Search"];
         responses: {
             200: components["responses"]["AutocompleteOK"];
-            400: components["responses"]["Error"];
-            401: components["responses"]["Error"];
-            402: components["responses"]["Error"];
-            403: components["responses"]["Error"];
-            429: components["responses"]["Error"];
-            503: components["responses"]["Unavailable"];
-        };
-    };
-    lens: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LensRequest"];
-            };
-        };
-        responses: {
-            200: components["responses"]["LensOK"];
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             402: components["responses"]["Error"];
