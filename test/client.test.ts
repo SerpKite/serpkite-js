@@ -162,6 +162,148 @@ describe("SerpKite", () => {
     expect(m.seen[12].headers.get("content-type")).toBeNull();
   });
 
+  test("search controls: domains, dates, highlights, published_at", async () => {
+    const body: SearchResponse = {
+      ...searchBody,
+      results: [
+        {
+          position: 1,
+          title: "t",
+          link: "https://github.com/x",
+          domain: "github.com",
+          published_at: "2026-09-30",
+          highlights: [{ text: "passage", score: 1.5, heading: "Intro" }],
+        },
+      ],
+    };
+    const m = mockFetch(json(body));
+    const res = await client(m.fetch).search({
+      q: "espresso",
+      include_domains: ["github.com"],
+      exclude_domains: "reddit.com,.gov",
+      boost_domains: ["arxiv.org"],
+      start_date: "2026-01-01",
+      end_date: "2026-03-31",
+      include_content: 1,
+      highlights: true,
+    });
+    expect(res.results[0]?.published_at).toBe("2026-09-30");
+    expect(res.results[0]?.highlights?.[0]?.heading).toBe("Intro");
+    expect(m.seen[0].body).toEqual({
+      q: "espresso",
+      include_domains: ["github.com"],
+      exclude_domains: "reddit.com,.gov",
+      boost_domains: ["arxiv.org"],
+      start_date: "2026-01-01",
+      end_date: "2026-03-31",
+      include_content: 1,
+      highlights: true,
+    });
+  });
+
+  test("extract posts the URLs and types results and failures", async () => {
+    const m = mockFetch(
+      json({
+        request: {
+          endpoint: "extract",
+          urls: ["https://a.example.com/x", "ftp://x"],
+          format: "markdown",
+        },
+        results: [
+          {
+            url: "https://a.example.com/x",
+            cached: false,
+            markdown: "# X",
+            highlights: [{ text: "passage", score: 2.5, heading: "X" }],
+          },
+        ],
+        failed: [
+          { url: "ftp://x", error: { code: "invalid_request", message: "url must be http(s)" } },
+        ],
+        meta: { request_id: "req_1", credits_used: 1, succeeded: 1, failed: 1 },
+      }),
+    );
+    const res = await client(m.fetch).extract({
+      urls: ["https://a.example.com/x", "ftp://x"],
+      query: "x",
+      highlights: 1,
+      timeout: 30,
+    });
+    expect(res.results[0]?.highlights?.[0]?.score).toBe(2.5);
+    expect(res.failed[0]?.error.code).toBe("invalid_request");
+    expect(new URL(m.seen[0].url).pathname).toBe("/v1/extract");
+    expect(m.seen[0].body).toEqual({
+      urls: ["https://a.example.com/x", "ftp://x"],
+      query: "x",
+      highlights: 1,
+      timeout: 30,
+    });
+  });
+
+  test("extract is not retried on 5xx (a lost response was still billed)", async () => {
+    const m = mockFetch(json(errorBody("upstream_error", "boom"), 503));
+    const err = await client(m.fetch, { maxRetries: 2 })
+      .extract({ urls: ["https://a.example.com/x"] })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(SerpKiteError);
+    expect(m.seen.length).toBe(1);
+  });
+  test("map posts the body and types the URLs", async () => {
+    const m = mockFetch(
+      json({
+        request: { endpoint: "map", url: "https://docs.example.com/", limit: 50 },
+        results: [
+          { url: "https://docs.example.com/install", lastmod: "2026-09-01", source: "sitemap" },
+        ],
+        meta: { request_id: "req_1", credits_used: 1, count: 1 },
+      }),
+    );
+    const res = await client(m.fetch).map({
+      url: "https://docs.example.com/",
+      search: "install",
+      include_paths: ["^/docs/"],
+      limit: 50,
+    });
+    expect(res.results[0]?.source).toBe("sitemap");
+    expect(res.meta.count).toBe(1);
+    expect(new URL(m.seen[0].url).pathname).toBe("/v1/map");
+    expect(m.seen[0].body).toEqual({
+      url: "https://docs.example.com/",
+      search: "install",
+      include_paths: ["^/docs/"],
+      limit: 50,
+    });
+  });
+
+  test("webpage: links, images, PDF metadata and exit country", async () => {
+    const m = mockFetch(
+      json({
+        request: { endpoint: "webpage", engine: "http", url: "https://example.com/a.pdf" },
+        url: "https://example.com/a.pdf",
+        markdown: "<!-- page 1 -->\nHello",
+        metadata: { title: "Paper", content_type: "application/pdf", pages: 3 },
+        links: [{ url: "https://example.com/docs", text: "Docs" }],
+        image_links: ["https://example.com/logo.png"],
+        meta: { request_id: "req_1", credits_used: 1, cached: false },
+      }),
+    );
+    const page = await client(m.fetch).webpage({
+      url: "https://example.com/a.pdf",
+      include_links: true,
+      include_images: true,
+      country: "de",
+    });
+    expect(page.metadata.pages).toBe(3);
+    expect(page.links?.[0]?.text).toBe("Docs");
+    expect(page.image_links).toEqual(["https://example.com/logo.png"]);
+    expect(m.seen[0].body).toEqual({
+      url: "https://example.com/a.pdf",
+      include_links: true,
+      include_images: true,
+      country: "de",
+    });
+  });
+
   test("engine accepts a provider list and meta.route is typed", async () => {
     const body: SearchResponse = {
       ...searchBody,

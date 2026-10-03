@@ -7,7 +7,20 @@ import type {
   BatchCreateParams,
   BatchCreateResponse,
   CompactResponse,
+  CrawlParams,
+  CrawlTask,
+  ExtractParams,
+  ExtractResponse,
   ImagesResponse,
+  MapParams,
+  MapResponse,
+  Monitor,
+  MonitorCreateParams,
+  MonitorList,
+  MonitorRun,
+  MonitorRunList,
+  MonitorRunsParams,
+  MonitorUpdateParams,
   NewsResponse,
   PatentsResponse,
   PlacesResponse,
@@ -19,6 +32,8 @@ import type {
   SearchParams,
   SearchResponse,
   ShoppingResponse,
+  TaskCancelResponse,
+  TaskCreated,
   VideosResponse,
   WebpageParams,
   WebpageResponse,
@@ -79,7 +94,10 @@ export interface BatchCreateOptions extends RequestOptions {
 }
 
 export interface WaitOptions {
-  /** Give up after this many milliseconds. Default 600000 (10 minutes). */
+  /**
+   * Give up after this many milliseconds. Default 600000 (10 minutes) for batches and
+   * 2100000 (35 minutes) for `waitForCrawl`: a crawl runs for up to 30 minutes.
+   */
   timeoutMs?: number;
   /** First delay between polls. Default 1000. Grows 1.5× per poll. */
   pollIntervalMs?: number;
@@ -96,7 +114,10 @@ export interface VerticalMethod<P, R> {
   (params: P, options?: RequestOptions): Promise<R | CompactResponse | string>;
 }
 
-type Method = "GET" | "POST";
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
+
+/** Task states after which `waitForCrawl` returns. */
+const TASK_DONE = new Set(["completed", "failed", "canceled"]);
 
 interface Call {
   method: Method;
@@ -177,10 +198,184 @@ export class SerpKite {
     return this.request({ method: "POST", path: "/v1/rank", body: params, options });
   }
 
+  /**
+   * Read up to 20 URLs (HTML or PDF) as Markdown, text or HTML in one call, with optional
+   * query-ranked `highlights` (BM25), `include_links` and `include_images`. 1 credit per URL
+   * that comes back (0.5 from cache); URLs that fail are listed in `failed` and cost nothing.
+   */
+  extract(params: ExtractParams, options?: RequestOptions): Promise<ExtractResponse> {
+    // Billed per page even when the response is lost: retried only on 429,
+    // and the HTTP timeout covers the server's deadline (timeout, default 50 s) + 15 s.
+    const wait = ((params.timeout ?? 50) + 15) * 1000;
+    return this.request({
+      method: "POST",
+      path: "/v1/extract",
+      body: params,
+      options: {
+        ...options,
+        timeoutMs: options?.timeoutMs ?? (this.timeoutMs > 0 ? Math.max(this.timeoutMs, wait) : 0),
+      },
+      retry: "rate_limit",
+    });
+  }
+
+  /**
+   * The URLs of a site from its sitemaps (XML, RSS/Atom, gzip, plain text) and start page,
+   * canonicalised and deduplicated, optionally ranked by `search`. `include_paths` /
+   * `exclude_paths` (regular expressions on the URL path) and `ignore_query_parameters`
+   * narrow the list. 1 credit; free when nothing is found.
+   */
+  map(params: MapParams, options?: RequestOptions): Promise<MapResponse> {
+    return this.request({ method: "POST", path: "/v1/map", body: params, options });
+  }
+
   /** Balance, limits and this month's usage for the key's account. */
   account(options?: RequestOptions): Promise<Account> {
     return this.request({ method: "GET", path: "/v1/account", options });
   }
+
+  // ── Async tasks: crawl ────────────────────────────────────────────────
+
+  /**
+   * Starts an async crawl of one site and returns the queued task (`202`). 1 credit per page
+   * read (0.5 from cache); `limit` credits (up to 1000 pages, `max_depth` up to 10) are
+   * reserved up front and the rest refunded. `sitemap` (`include` default, `only`, `skip`)
+   * seeds the crawl with sitemap URLs; `query` reads the most relevant pages first. robots.txt
+   * and Crawl-delay are honoured; `result.stats.stopped` says why the crawl ended (`done`,
+   * `limit`, `time_limit`, `size_limit`, `too_many_failures`, `canceled`).
+   * Only retried on 429, so a lost response never starts (and reserves) a second crawl.
+   */
+  crawl(params: CrawlParams, options?: RequestOptions): Promise<TaskCreated> {
+    return this.request({
+      method: "POST",
+      path: "/v1/crawl",
+      body: params,
+      options,
+      retry: "rate_limit",
+    });
+  }
+
+  /** Polls a crawl (results are kept for 24 hours). */
+  getCrawl(id: string, options?: RequestOptions): Promise<CrawlTask> {
+    return this.request({ method: "GET", path: `/v1/crawl/${encodeURIComponent(id)}`, options });
+  }
+
+  /** Cancels a crawl: refunded if still queued, else stops at the next checkpoint. */
+  cancelCrawl(id: string, options?: RequestOptions): Promise<TaskCancelResponse> {
+    return this.request({
+      method: "DELETE",
+      path: `/v1/crawl/${encodeURIComponent(id)}`,
+      options,
+    });
+  }
+
+  /**
+   * Polls until the crawl is `completed`, `failed` or `canceled` and returns it (a failed
+   * task is returned, not thrown; check `status` and `error`). Accepts an id or the task
+   * returned by `crawl`.
+   */
+  async waitForCrawl(
+    idOrTask: string | { id: string },
+    options: WaitOptions = {},
+  ): Promise<CrawlTask> {
+    return this.#waitTask(taskId(idOrTask), (id) => this.getCrawl(id, { signal: options.signal }), {
+      ...options,
+      timeoutMs: options.timeoutMs ?? 2_100_000,
+    });
+  }
+
+  // ── Monitors ──────────────────────────────────────────────────────────
+
+  readonly monitors = {
+    /**
+     * Saves a `search` or `news` request (`q`) that runs on a schedule (hourly to monthly) and
+     * POSTs results it hasn't seen before to `webhook_url` (`monitor.results`). With
+     * `endpoint: "webpage"` and a `url` it checks that page each interval (1 credit per check)
+     * and reports it (`MonitorPageChange`) when its content changes. `metadata` (your JSON
+     * object, at most 2 KB) is echoed on the monitor and in its webhooks. Without a
+     * `webhook_url`, read new results from `monitors.runs`. `active: false`
+     * creates it paused. A monitor pauses itself after 10 failed runs in a row
+     * (`last_status: "paused"`); `update(id, { active: true })` resumes it. Each run costs
+     * what its search costs. Only retried on 429.
+     */
+    create: (params: MonitorCreateParams, options?: RequestOptions): Promise<Monitor> =>
+      this.request({
+        method: "POST",
+        path: "/v1/monitors",
+        body: params,
+        options,
+        retry: "rate_limit",
+      }),
+
+    /** The account's monitors. */
+    list: (options?: RequestOptions): Promise<MonitorList> =>
+      this.request({ method: "GET", path: "/v1/monitors", options }),
+
+    get: (id: string, options?: RequestOptions): Promise<Monitor> =>
+      this.request({ method: "GET", path: `/v1/monitors/${encodeURIComponent(id)}`, options }),
+
+    /**
+     * Changes `name`, `interval` / `interval_seconds`, `webhook_url` (`""` removes it),
+     * `active` (`true` resumes a paused monitor), `metadata` (an object replaces it, `null`
+     * clears it) or the saved request (`endpoint`, `q`, `url`, `country`, `num`, domains,
+     * `engine`…). Switching `endpoint` between a search and `webpage` drops the other kind's
+     * fields. A changed search reports every result as new on the next run.
+     */
+    update: (id: string, params: MonitorUpdateParams, options?: RequestOptions): Promise<Monitor> =>
+      this.request({
+        method: "PATCH",
+        path: `/v1/monitors/${encodeURIComponent(id)}`,
+        body: params,
+        options,
+      }),
+
+    delete: async (id: string, options?: RequestOptions): Promise<void> => {
+      await this.request({
+        method: "DELETE",
+        path: `/v1/monitors/${encodeURIComponent(id)}`,
+        options,
+      });
+    },
+
+    /** Runs the monitor at the next scheduler poll (within about 30 seconds). */
+    run: (id: string, options?: RequestOptions): Promise<Monitor> =>
+      this.request({
+        method: "POST",
+        path: `/v1/monitors/${encodeURIComponent(id)}/run`,
+        options,
+        retry: "rate_limit",
+      }),
+
+    /**
+     * One page of the monitor's run history, newest first (`limit` 1-100, default 20). Each
+     * run carries its new results for 24 hours. Pass `next_before` as `before` for the next
+     * page; it is null on the last one.
+     */
+    runs: (
+      id: string,
+      params: MonitorRunsParams = {},
+      options?: RequestOptions,
+    ): Promise<MonitorRunList> =>
+      this.request({
+        method: "GET",
+        path: `/v1/monitors/${encodeURIComponent(id)}/runs${query(params)}`,
+        options,
+      }),
+
+    /**
+     * Iterates over every run of the monitor, newest first, fetching pages of `limit` as
+     * needed (starting at `before` when given).
+     *
+     * ```ts
+     * for await (const run of sk.monitors.iterRuns("m1")) console.log(run.new_results);
+     * ```
+     */
+    iterRuns: (
+      id: string,
+      params: MonitorRunsParams = {},
+      options?: RequestOptions,
+    ): AsyncIterable<MonitorRun> => this.#iterRuns(id, params, options),
+  };
 
   // ── Batches ───────────────────────────────────────────────────────────
 
@@ -222,6 +417,45 @@ export class SerpKite {
   };
 
   // ── Plumbing ──────────────────────────────────────────────────────────
+
+  async *#iterRuns(
+    id: string,
+    params: MonitorRunsParams,
+    options?: RequestOptions,
+  ): AsyncGenerator<MonitorRun> {
+    let before = params.before;
+    for (;;) {
+      const page = await this.monitors.runs(id, { ...params, before }, options);
+      yield* page.results;
+      if (!page.next_before || page.results.length === 0) return;
+      before = page.next_before;
+    }
+  }
+
+  async #waitTask<T extends { status: string }>(
+    id: string,
+    get: (id: string) => Promise<T>,
+    o: WaitOptions,
+  ): Promise<T> {
+    const timeoutMs = o.timeoutMs ?? 600_000;
+    const maxInterval = o.maxPollIntervalMs ?? 10_000;
+    let interval = o.pollIntervalMs ?? 1_000;
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const task = await get(id);
+      if (TASK_DONE.has(task.status)) return task;
+      const left = deadline - Date.now();
+      if (left <= 0) {
+        throw new SerpKiteError(
+          0,
+          "timeout",
+          `task ${id} still ${task.status} after ${timeoutMs} ms`,
+        );
+      }
+      await sleep(Math.min(interval, left), o.signal);
+      interval = Math.min(interval * 1.5, maxInterval);
+    }
+  }
 
   #vertical<P, R>(path: string): VerticalMethod<P, R> {
     return ((params: P, options?: RequestOptions) =>
@@ -371,6 +605,22 @@ export class SerpKite {
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────
+
+/** Builds `?a=1&b=2` from the defined values (empty string when there are none). */
+function query(params: Record<string, string | number | boolean | undefined>): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null) q.set(k, String(v));
+  }
+  const s = q.toString();
+  return s ? `?${s}` : "";
+}
+
+function taskId(idOrTask: string | { id: string }): string {
+  const id = typeof idOrTask === "string" ? idOrTask : idOrTask?.id;
+  if (!id) throw new SerpKiteError(0, "invalid_request", "a task id is required");
+  return id;
+}
 
 /** Parses Retry-After (seconds or an HTTP date) into milliseconds. */
 export function parseRetryAfter(v: string | null): number | undefined {

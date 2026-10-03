@@ -94,6 +94,13 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `autocomplete(params)` | `POST /v1/autocomplete` | `SearchParams` | `AutocompleteResponse` (`results[].value`) |
 | `webpage(params)` | `POST /v1/webpage` | `WebpageParams` (`url`, `include_html`) | `WebpageResponse` (`markdown`, `text`, `metadata`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
+| `extract(params)` | `POST /v1/extract` | `ExtractParams` (`urls` ≤ 20, `format`, `query`, `highlights`, …) | `ExtractResponse` (`results`, `failed`) |
+| `map(params)` | `POST /v1/map` | `MapParams` (`url`, `search`, `limit`, `sitemap`, path filters) | `MapResponse` (`results[].url`) |
+| `crawl(params)` | `POST /v1/crawl` | `CrawlParams` (`url`, `limit` ≤ 1000, `max_depth` ≤ 10, …) | `TaskCreated` (`202`) |
+| `getCrawl(id)` / `cancelCrawl(id)` | `GET` / `DELETE /v1/crawl/{id}` | task id | `CrawlTask` / `TaskCancelResponse` |
+| `waitForCrawl(idOrTask, options?)` | polls `GET /v1/crawl/{id}` | task id or task | `CrawlTask` (`completed`, `failed` or `canceled`) |
+| `monitors.create/list/get/update/delete/run` | `/v1/monitors…` | `MonitorCreateParams`, `MonitorUpdateParams` | `Monitor`, `MonitorList` |
+| `monitors.runs(id, params?)` / `monitors.iterRuns(id)` | `GET /v1/monitors/{id}/runs` | `limit`, `before` | `MonitorRunList` / `AsyncIterable<MonitorRun>` |
 | `account()` | `GET /v1/account` | none | `Account` (`balance`, `plan`, `rate_limit_rps`, `month`, …) |
 | `batches.create(params)` | `POST /v1/batches` | `BatchCreateParams` | `BatchCreateResponse` |
 | `batches.get(id)` | `GET /v1/batches/{id}` | batch id | `Batch` |
@@ -146,6 +153,24 @@ await sk.search({ q: "espresso", max_age: 3600 });
 "compact"` resolves to a `CompactResponse`. The return type follows the literal you pass. With
 `fields` the response contains only the requested keys, so treat the typed fields as optional.
 
+## Search controls
+
+Domain filters and date ranges work on search, news, images and videos; `boost_domains` on search
+and news; `highlights` on search with `include_content`. None of them costs extra credits.
+
+```ts
+const res = await sk.search({
+  q: "connection pooling",
+  include_domains: ["postgresql.org", "github.com/pgbouncer", ".edu"], // host, path prefix or TLD (≤ 20)
+  exclude_domains: ["pinterest.com"],
+  boost_domains: ["postgresql.org"], // to the top, keeping the rest
+  start_date: "2026-01-01", // YYYY-MM-DD, end_date too
+  include_content: 3,
+  highlights: true, // 3 query-ranked passages per page instead of the whole page
+});
+for (const r of res.results) console.log(r.position, r.published_at, r.highlights?.[0]?.text);
+```
+
 ## Search engines & fallback
 
 By default every request is answered by Google only (`engine: "google"`); SerpKite already
@@ -172,6 +197,104 @@ await sk.news({ q: "espresso", engine: ["google", "brave"] });
 - `meta.engine` names the provider that answered; `meta.route` (`RouteStep[]`) lists each attempt
   and its `outcome` (absent on cache hits). `request.engine` echoes what you asked for.
 - Credits (`meta.credits_used`, `X-Credits-Used`) follow the answering provider's price.
+
+## Map and extract
+
+```ts
+// The URLs of a site (1 credit): sitemaps + start page, canonicalised and deduplicated
+const site = await sk.map({ url: "https://docs.example.com/", search: "install", include_paths: ["^/guides/"] });
+for (const u of site.results) console.log(u.url);
+
+// Up to 20 URLs (HTML or PDF) as Markdown in one call: 1 credit per URL that came back
+const pages = await sk.extract({ urls: site.results.slice(0, 5).map((u) => u.url), query: "install", highlights: 3 });
+for (const f of pages.failed) console.log("failed", f.url, f.error.code); // not charged
+```
+
+## Crawl
+
+```ts
+const task = await sk.crawl({
+  url: "https://docs.example.com/",
+  limit: 200, // up to 1000 pages; max_depth up to 10
+  include_paths: ["^/guides/"],
+  sitemap: "include", // include (default) | only | skip
+  query: "authentication", // read the most relevant pages first
+});
+const done = await sk.waitForCrawl(task); // polls until completed/failed/canceled
+for (const p of done.result?.pages ?? []) console.log(p.url, p.markdown?.length);
+console.log(done.result?.stats.stopped); // done | limit | time_limit | size_limit | too_many_failures | canceled
+```
+
+- `crawl` reserves `limit` credits and charges 1 per page read (0.5 from cache); the rest is
+  refunded. A crawl that reads nothing fails (`no_pages`) and costs nothing.
+- It returns `202` with a task; `waitForCrawl` takes `{ timeoutMs, pollIntervalMs, maxPollIntervalMs,
+  signal }` like `batches.wait` (default timeout 35 minutes: a crawl runs for up to 30) and
+  returns failed or canceled tasks instead of throwing.
+- `cancelCrawl(id)` refunds a queued crawl; a running one stops at its next checkpoint
+  (`status: "canceling"`) and is charged for the pages read.
+- Robots.txt (per host) and Crawl-delay are honoured; `result.stats` reports `discovered`, `queued`,
+  `duplicates`, `sitemap_urls`, `robots`, `robots_blocked` and why it `stopped`.
+- Pass `webhook_url` to get a signed `crawl.completed` delivery instead of polling. A result over
+  4 MB arrives as `result: null` with `result_omitted: true`; fetch it from `poll_url`.
+
+## Monitors
+
+```ts
+const mon = await sk.monitors.create({
+  q: "ai agents",
+  endpoint: "news",
+  interval: "hourly", // hourly | daily | weekly, or interval_seconds (3600-2592000)
+  webhook_url: "https://example.com/hooks/serpkite",
+});
+await sk.monitors.run(mon.id); // due within ~30 s
+await sk.monitors.update(mon.id, { active: false });
+await sk.monitors.update(mon.id, { q: "ai agents frameworks", num: 20 }); // change the saved search
+const { results } = await sk.monitors.list();
+
+// Run history, newest first (new results kept 24 h): one page, or every run
+const page = await sk.monitors.runs(mon.id, { limit: 20 }); // page.next_before → { before }
+for await (const run of sk.monitors.iterRuns(mon.id)) console.log(run.status, run.new_results);
+await sk.monitors.delete(mon.id);
+```
+
+A `webpage` monitor watches one page instead of a search: it checks `url` each interval (1 credit
+per check) and reports it as a `MonitorPageChange` (`url`, `title`, `change: "new" | "changed"`,
+`content_hash`, `markdown`) when its content changes. `metadata` (your own JSON object, ≤ 2 KB) is
+stored on any monitor and echoed in its `monitor.results` webhooks; on `update`, an object replaces it
+and `null` clears it.
+
+```ts
+const watch = await sk.monitors.create({
+  endpoint: "webpage",
+  url: "https://example.com/pricing",
+  interval: "daily",
+  metadata: { customer: "acme" },
+});
+await sk.monitors.update(watch.id, { metadata: null });
+```
+
+Each search run costs what its search costs (1 credit per 10 results, `num` 100 is 7; empty and failed runs are free) and POSTs only results it
+hasn't seen before (among the top `num`) as a `monitor.results` webhook. `webhook_url` is optional:
+without one, read new results from `monitors.runs`. `active: false` creates a monitor paused; after 10
+failed runs in a row it pauses itself (`last_status: "paused"`) and `update(id, { active: true })`
+resumes it. `webhook_url: ""` removes the webhook; a changed search reports every result as new once.
+
+## Webhooks
+
+Every delivery (`batch.completed`, `crawl.completed`, `monitor.results`) is signed with
+`X-SerpKite-Signature`. `parseWebhook` verifies it and returns the event typed by
+`X-SerpKite-Event`, with `deliveryId` from `X-SerpKite-Delivery` (for `monitor.results`, the
+`run_id`) to deduplicate retries:
+
+```ts
+import { parseWebhook } from "serpkite";
+
+const ev = await parseWebhook(process.env.SERPKITE_WEBHOOK_SECRET!, rawBody, req.headers); // throws invalid_signature
+if (ev.type === "monitor.results") console.log(ev.data.metadata, ev.data.url, ev.data.new_results.length);
+if (ev.type === "crawl.completed") console.log(ev.data.status, ev.data.poll_url);
+```
+
+`verifyWebhook(secret, rawBody, headers)` only checks the signature and returns a boolean.
 
 ## Batches
 
@@ -246,8 +369,8 @@ Failed, empty and blocked searches are refunded, so they never cost credits.
 Requests are retried up to `maxRetries` times (default 2) on `429`, `5xx`, network errors and
 timeouts, with exponential backoff (`retryDelayMs · 2^attempt`, capped at 8 s) and jitter. A
 `Retry-After` header (seconds or HTTP date, capped at 60 s) takes precedence. Other `4xx` errors
-are never retried. `batches.create` retries only on `429`, so a lost response can never queue
-(and bill) the same requests twice.
+are never retried. `batches.create`, `crawl`, `monitors.create` and `monitors.run` retry only on
+`429`, so a lost response can never queue (and bill) the same work twice.
 
 ## Types
 
@@ -257,7 +380,9 @@ Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `ReviewsResponse`, `ShoppingResponse`, `ScholarResponse`, `PatentsResponse`,
 `AutocompleteResponse`, `WebpageResponse`, `RankResponse`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
-`CompactResponse` and more. The raw
+`CompactResponse`, `MapResponse`, `ExtractResponse`, `CrawlParams`, `CrawlTask`, `CrawlResult`,
+`TaskCreated`, `Monitor`, `MonitorRun`, `MonitorPageChange`, `TaskCompletedEvent`,
+`MonitorResultsEvent`, `WebhookEvent` and more. The raw
 `paths`, `components` and `operations` types are exported as well.
 
 ## Development

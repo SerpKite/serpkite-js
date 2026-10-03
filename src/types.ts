@@ -1,4 +1,4 @@
-import type { components } from "./generated/openapi";
+import type { components, operations } from "./generated/openapi";
 
 type Schemas = components["schemas"];
 
@@ -36,6 +36,8 @@ export type SearchParams = Omit<Schemas["SearchRequest"], "engine"> & {
 export type ReviewsParams = Schemas["ReviewsRequest"];
 export type WebpageParams = Schemas["WebpageRequest"];
 export type RankParams = Schemas["RankRequest"];
+export type MapParams = Schemas["MapRequest"];
+export type ExtractParams = Schemas["ExtractRequest"];
 
 /** `format` values accepted by the verticals. */
 export type Format = NonNullable<SearchParams["format"]>;
@@ -64,6 +66,15 @@ export type ScholarResult = Schemas["ScholarResult"];
 export type PatentResult = Schemas["PatentResult"];
 export type Suggestion = Schemas["Suggestion"];
 export type PageMetadata = Schemas["PageMetadata"];
+/** An outbound link of a page (`webpage` with `include_links`). */
+export type PageLink = Schemas["PageLink"];
+/** A query-ranked passage of a page (`search` with `highlights`). */
+export type Highlight = Schemas["Highlight"];
+/** A domain filter: a list or a comma-separated string (`include_domains`…). */
+export type DomainList = Schemas["DomainList"];
+export type MapURL = Schemas["MapURL"];
+export type ExtractResult = Schemas["ExtractResult"];
+export type ExtractFailure = Schemas["ExtractFailure"];
 export type RankMatch = Schemas["RankResponse"]["matches"][number];
 
 // ── Responses ───────────────────────────────────────────────────────────
@@ -82,6 +93,8 @@ export type PatentsResponse = Schemas["PatentsResponse"];
 export type AutocompleteResponse = Schemas["AutocompleteResponse"];
 export type WebpageResponse = Schemas["WebpageResponse"];
 export type RankResponse = Schemas["RankResponse"];
+export type MapResponse = Schemas["MapResponse"];
+export type ExtractResponse = Schemas["ExtractResponse"];
 export type Account = Schemas["Account"];
 export type Status = Schemas["Status"];
 
@@ -135,3 +148,104 @@ export type BatchCreateParams = {
     webhook_url?: string;
   };
 }[BatchEndpoint];
+
+// ── Async tasks: crawl ──────────────────────────────────────────────────
+
+export type TaskStatus = Schemas["TaskStatus"];
+/** The `202` body of `crawl`. */
+export type TaskCreated = Schemas["TaskCreated"];
+export type TaskCancelResponse = Schemas["TaskCancelResponse"];
+export type TaskError = Schemas["TaskError"];
+
+/**
+ * Body of `POST /v1/crawl`: `limit` up to 1000 pages, `max_depth` up to 10, `sitemap`
+ * (`include` | `only` | `skip`), `query` for a best-first crawl, path filters and
+ * `ignore_query_parameters`.
+ */
+export type CrawlParams = Schemas["CrawlRequest"];
+/** `sitemap` values of `crawl`. */
+export type CrawlSitemapMode = NonNullable<CrawlParams["sitemap"]>;
+export type CrawlTask = Schemas["CrawlTask"];
+export type CrawlResult = Schemas["CrawlResult"];
+/** `result.stats` of a crawl: counts, robots.txt outcome and why it `stopped`. */
+export type CrawlStats = CrawlResult["stats"];
+/** Why a crawl ended (`result.stats.stopped`). */
+export type CrawlStopReason = NonNullable<CrawlStats["stopped"]>;
+export type CrawlPage = Schemas["CrawlPage"];
+
+// ── Monitors ────────────────────────────────────────────────────────────
+
+/**
+ * Body of `POST /v1/monitors`. `search` and `news` monitors need `q`; `webpage` monitors need
+ * `url` (and take only `country` besides) and report the page when its content changes.
+ * `metadata` is your own JSON object (at most 2 KB), echoed on the monitor and its webhooks.
+ * `webhook_url` is optional: without one, new results are read from the run history
+ * (`monitors.runs`). `active: false` creates the monitor paused.
+ */
+export type MonitorCreateParams = Omit<Schemas["MonitorCreateRequest"], "engine"> & {
+  engine?: Engine;
+};
+/**
+ * Body of `PATCH /v1/monitors/{id}`: only the fields sent change. Search fields (or `url`) are
+ * merged into the saved request (a changed one reports every result as new on the next run);
+ * switching `endpoint` between a search and `webpage` drops the other kind's fields.
+ * `metadata` replaces the stored object (`null` clears it); `webhook_url: ""` removes the
+ * webhook; `active: true` resumes a paused monitor.
+ */
+export type MonitorUpdateParams = Omit<Schemas["MonitorUpdateRequest"], "engine"> & {
+  engine?: Engine;
+};
+export type Monitor = Schemas["Monitor"];
+/** What a monitor watches: a `search`, `news` search, or a `webpage` for content changes. */
+export type MonitorEndpoint = Monitor["endpoint"];
+/** Your own JSON object on a monitor (at most 2 KB), echoed in `monitor.results`. */
+export type MonitorMetadata = NonNullable<Monitor["metadata"]>;
+/**
+ * A result item of a `webpage` monitor (in run `results` and `monitor.results` `new_results`):
+ * the page when first seen (`change: "new"`) or when its content changed (`"changed"`).
+ */
+export type MonitorPageChange = Schemas["MonitorPageChange"];
+/** `last_status` of a monitor; `"paused"` after 10 failed runs in a row. */
+export type MonitorStatus = NonNullable<Monitor["last_status"]>;
+export type MonitorList = Schemas["MonitorList"];
+export type MonitorSearch = Schemas["MonitorSearch"];
+/**
+ * One run of a monitor. `results` holds the new results (null when none, or after 24 hours):
+ * `OrganicResult`-shaped for search, `NewsResult` for news, {@link MonitorPageChange} for webpage.
+ */
+export type MonitorRun = Schemas["MonitorRun"];
+/** A page of runs, newest first. Pass `next_before` as `before` for the next page. */
+export type MonitorRunList = Schemas["MonitorRunList"];
+/** Query of `GET /v1/monitors/{id}/runs`. */
+export type MonitorRunsParams = NonNullable<operations["listMonitorRuns"]["parameters"]["query"]>;
+
+// ── Webhooks ────────────────────────────────────────────────────────────
+
+/** Body of `batch.completed`: the finished job, without `poll_url`, `webhook_url` and `webhook_status`. */
+export type BatchCompletedEvent = Omit<Batch, "poll_url" | "webhook_url" | "webhook_status"> & {
+  event: "batch.completed";
+};
+/**
+ * Body of `crawl.completed`. When the result is over 4 MB, `result` is null and
+ * `result_omitted` is true: fetch the task from `poll_url`.
+ */
+export type TaskCompletedEvent = Schemas["TaskCompletedEvent"];
+/**
+ * Body of `monitor.results`. `run_id` is also the `X-SerpKite-Delivery` header (dedupe retries
+ * on it). Carries the monitor's `metadata`, and `url` for webpage monitors (whose `new_results`
+ * are {@link MonitorPageChange} items and `q` is empty).
+ */
+export type MonitorResultsEvent = Schemas["MonitorResultsEvent"];
+
+/** `X-SerpKite-Event` values. Plain strings stay accepted for events added later. */
+export type WebhookEventType =
+  | "batch.completed"
+  | "crawl.completed"
+  | "monitor.results"
+  | (string & {});
+
+/** A verified webhook delivery, from `parseWebhook`. */
+export type WebhookEvent =
+  | { type: "batch.completed"; deliveryId: string | undefined; data: BatchCompletedEvent }
+  | { type: "crawl.completed"; deliveryId: string | undefined; data: TaskCompletedEvent }
+  | { type: "monitor.results"; deliveryId: string | undefined; data: MonitorResultsEvent };

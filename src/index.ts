@@ -11,4 +11,4 @@ export { SerpKiteError } from "./errors";
 export type { components, operations, paths } from "./generated/openapi";
 export type * from "./types";
 export { isBatchError } from "./util";
-export { type VerifyWebhookOptions, verifyWebhook } from "./webhooks";
+export { parseWebhook, type VerifyWebhookOptions, verifyWebhook } from "./webhooks";

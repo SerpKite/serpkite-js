@@ -276,8 +276,214 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Fetch any public URL and return clean Markdown + metadata (1 credit) */
+        /** Fetch any public URL (HTML or PDF) and return clean Markdown + metadata (1 credit) */
         post: operations["webpage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/extract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Up to 20 URLs (HTML or PDF) as Markdown, text or HTML, with query-ranked highlights, links and images (1 credit per URL read)
+         * @description Every URL is billed only when it comes back: 1 credit, 0.5 from cache. URLs that
+         *     fail are listed in `failed` and cost nothing. The response is `200` even when every
+         *     URL failed. Highlights are ranked with BM25 (lexical, no model).
+         */
+        post: operations["extract"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/map": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The URLs of a site, from robots.txt sitemaps and the start page's links, optionally ranked by a search (1 credit; free when nothing is found)
+         * @description Reads the sitemaps listed in robots.txt (or `/sitemap.xml`), following sitemap
+         *     indexes; XML, gzip, RSS/Atom and plain-text sitemaps are understood. URLs are
+         *     cleaned (fragment and tracking parameters such as `utm_*`, `gclid` and `fbclid`
+         *     dropped), kept on the site, filtered by `include_paths` / `exclude_paths` and
+         *     de-duplicated (`www.`, scheme and trailing slash folded). `search` ranks the URLs
+         *     by their path words and titles (BM25) and drops the ones that don't match. Takes
+         *     at most about 30 seconds.
+         */
+        post: operations["map"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/crawl": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an async crawl of one site (1 credit per page read; `limit` credits reserved up front, the rest refunded)
+         * @description From `url` and (unless `sitemap: skip`) the site's sitemaps, same host (optionally
+         *     subdomains), up to `limit` pages and `max_depth` link hops, filtered by
+         *     `include_paths` / `exclude_paths` (regular expressions matched against the URL
+         *     path). Breadth first, or best first with `query` (pages whose URL and link text
+         *     match it are read first). Each host's robots.txt is honoured (RFC 9309: rules,
+         *     `Crawl-delay`; a robots.txt that answers 5xx stops the crawl at the start page).
+         *     URLs are canonicalised (fragments and tracking parameters dropped, `www.`,
+         *     trailing slashes and redirects folded) so each page is read once. Each page comes
+         *     back as Markdown (or text) with its metadata. A crawl runs for at most 30 minutes
+         *     and returns up to 16 MB of pages; `result.stats.stopped` says why it ended.
+         *
+         *     Returns `202` with a task; poll `GET /v1/crawl/{id}` or wait for the signed
+         *     `crawl.completed` webhook. Pages read cost 1 credit each (0.5 from cache); a crawl
+         *     that read nothing fails (`no_pages`) and is refunded. At most 20 crawls per account
+         *     may be queued or running at once (`429`); a crawl interrupted by a deploy restarts
+         *     from the beginning.
+         */
+        post: operations["createCrawl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/crawl/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Poll a crawl (kept for 24 hours) */
+        get: operations["getCrawl"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a crawl. A queued crawl is canceled and refunded at once; a running one stops at its next checkpoint and is charged for the pages read
+         * @description `404` when there is no such crawl, `409` when it already finished.
+         */
+        delete: operations["cancelCrawl"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the account's monitors */
+        get: operations["listMonitors"];
+        put?: never;
+        /**
+         * Create a monitor — a saved /v1/search or /v1/news request (new results) or a /v1/webpage URL (content changes) that runs on a schedule and reports what is new (signed webhook and run history)
+         * @description Runs hourly to monthly (`interval` or `interval_seconds`, default daily); the
+         *     first run is due right away (unless `active: false`). With `endpoint: webpage`
+         *     the monitor watches `url` and reports the page (Markdown, `change: new|changed`)
+         *     whenever its content changes (1 credit per check). Each run is billed like the
+         *     search it makes (1 credit per 10 results, `num: 100` is 7; empty and failed runs
+         *     are free) on the monitor's key: the key that created it, or last changed or ran
+         *     it, under that key's limits and the account's spend cap. Only the fields below
+         *     are kept; any other search field is a `400`. Results among the
+         *     top `num` not seen in earlier runs are POSTed as a `monitor.results` webhook when
+         *     the monitor has a `webhook_url`, and are always listed in its run history
+         *     (`GET /v1/monitors/{id}/runs`, results kept 24 hours). At most 100 monitors per
+         *     account (403 `forbidden`). A monitor pauses itself after 10 failed runs in a row
+         *     (search errors, insufficient credits or webhook failures) or when its key is
+         *     revoked; set `active: true` to resume.
+         */
+        post: operations["createMonitor"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitors/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Get a monitor */
+        get: operations["getMonitor"];
+        put?: never;
+        post?: never;
+        /** Delete a monitor */
+        delete: operations["deleteMonitor"];
+        options?: never;
+        head?: never;
+        /** Update a monitor: name, interval, webhook_url (empty string removes it), active, and the saved search (endpoint, q and search options; a changed search starts a new baseline) */
+        patch: operations["updateMonitor"];
+        trace?: never;
+    };
+    "/v1/monitors/{id}/runs": {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description `next_before` of the previous page */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** A monitor's run history, newest first (runs are kept 30 days, their results 24 hours) */
+        get: operations["listMonitorRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/monitors/{id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run a monitor now (it becomes due at the next scheduler poll, within about 30 seconds)
+         * @description The monitor is bound to the calling key, which this and later runs are billed to.
+         */
+        post: operations["runMonitor"];
         delete?: never;
         options?: never;
         head?: never;
@@ -441,7 +647,55 @@ export interface paths {
         trace?: never;
     };
 }
-export type webhooks = Record<string, never>;
+export interface webhooks {
+    "crawl.completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A crawl finished (completed, failed or canceled)
+         * @description Sent to the crawl's `webhook_url` (or the account webhook). Signed like batch
+         *     webhooks: `X-SerpKite-Event: crawl.completed`, `X-SerpKite-Delivery` (the task id),
+         *     `X-SerpKite-Timestamp` and `X-SerpKite-Signature: v1=<hex HMAC-SHA256(secret,
+         *     "<timestamp>.<raw body>")>`. Retried with backoff until a 2xx.
+         */
+        post: operations["crawlCompletedWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "monitor.results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A monitor run found results it had not seen before
+         * @description Sent to the monitor's `webhook_url` (when it has one) only when a run finds new results (the first
+         *     run sends everything it found, with `first_run: true`). Same signature headers as
+         *     the other webhooks, with `X-SerpKite-Event: monitor.results` and
+         *     `X-SerpKite-Delivery: <run id>`. Tried up to 3 times per run; results that could
+         *     not be delivered stay new for the next run (and are in the run history either way).
+         */
+        post: operations["monitorResultsWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+}
 export interface components {
     schemas: {
         Error: {
@@ -533,6 +787,37 @@ export interface components {
             /** @description Accept a cached result up to this many seconds old (50% of credits on a hit) */
             max_age?: number;
             engine?: components["schemas"]["EngineParam"];
+            /** @description Only results from these domains (search, news, images, videos). Compiled into site: operators and enforced on the results. Not with engine=consensus */
+            include_domains?: components["schemas"]["DomainList"];
+            /** @description Drop results from these domains (search, news, images, videos). Not with engine=consensus */
+            exclude_domains?: components["schemas"]["DomainList"];
+            /** @description Move results from these domains to the top, keeping the order within both groups (search, news) */
+            boost_domains?: components["schemas"]["DomainList"];
+            /**
+             * Format: date
+             * @description Only results published on or after this date, YYYY-MM-DD (search, news, images, videos). Can't be combined with time or tbs. A fallback engine without date ranges is skipped
+             */
+            start_date?: string;
+            /**
+             * Format: date
+             * @description Only results published on or before this date, YYYY-MM-DD. Can't be combined with time or tbs
+             */
+            end_date?: string;
+            /**
+             * @description Return up to 3 query-ranked passages (`highlights`) of each page read by include_content instead of the whole page (search only; needs include_content; no extra credits)
+             * @default false
+             */
+            highlights?: boolean;
+        };
+        /** @description Domains as an array or a comma-separated string, at most 20: a host (`example.com`, subdomains match), a host with a path prefix (`github.com/org`) or a TLD (`.gov`). */
+        DomainList: string | string[];
+        /** @description A query-relevant passage of a page, verbatim */
+        Highlight: {
+            text: string;
+            /** @description Relevance to the query (BM25; higher is better */
+            score: number;
+            /** @description The section heading path the passage sits under */
+            heading?: string;
         };
         /** @description One of place_id, cid or fid is required */
         ReviewsRequest: {
@@ -559,7 +844,10 @@ export interface components {
             max_age?: number;
         };
         WebpageRequest: {
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description An HTML page or a PDF
+             */
             url: string;
             /**
              * @default json
@@ -568,7 +856,324 @@ export interface components {
             format?: "json" | "markdown" | "compact";
             /** @default false */
             include_html?: boolean;
+            /**
+             * @description Also return the page's outbound links (`links`)
+             * @default false
+             */
+            include_links?: boolean;
+            /**
+             * @description Also return the page's image URLs (`image_links`)
+             * @default false
+             */
+            include_images?: boolean;
+            /** @description Fetch through an exit in this country (ISO 3166-1 alpha-2) for geo-dependent pages */
+            country?: string;
             max_age?: number;
+        };
+        ExtractRequest: {
+            /** @description HTML pages or PDFs (duplicates are dropped) */
+            urls: string[];
+            /**
+             * @default markdown
+             * @enum {string}
+             */
+            format?: "markdown" | "text" | "html";
+            /** @description What highlights are ranked against */
+            query?: string;
+            /**
+             * @description Query-ranked passages per page (BM25; needs query)
+             * @default 0
+             */
+            highlights?: number;
+            /** @description Trim each page's markdown or text to about this many tokens */
+            max_tokens?: number;
+            /** @default false */
+            include_links?: boolean;
+            /** @default false */
+            include_images?: boolean;
+            /** @description Accept a cached page up to this many seconds old (0.5 credit) */
+            max_age?: number;
+            /** @description Fetch through an exit in this country (ISO 3166-1 alpha-2) */
+            country?: string;
+            /**
+             * @description Seconds to wait for the pages; a page still loading is listed in `failed` (`upstream_timeout`, not charged)
+             * @default 50
+             */
+            timeout?: number;
+        };
+        ExtractResult: {
+            /** @description Final URL after redirects */
+            url: string;
+            status_code?: number;
+            title?: string;
+            /** @description The page's published time as ISO 8601, when it has one */
+            published_at?: string;
+            metadata?: components["schemas"]["PageMetadata"];
+            cached: boolean;
+            /** @description format=markdown */
+            markdown?: string;
+            /** @description format=text */
+            text?: string;
+            /** @description format=html (null for a PDF); at most 2 MiB per page */
+            html?: string | null;
+            /** @description include_links=true only */
+            links?: components["schemas"]["PageLink"][];
+            /** @description include_images=true only */
+            images?: string[];
+            /** @description highlights > 0 only */
+            highlights?: components["schemas"]["Highlight"][];
+        };
+        ExtractFailure: {
+            url: string;
+            error: {
+                /**
+                 * @example invalid_request
+                 * @example upstream_error
+                 * @example upstream_timeout
+                 * @example empty_page
+                 */
+                code: string;
+                message: string;
+            };
+        };
+        ExtractResponse: {
+            request: {
+                /** @constant */
+                endpoint?: "extract";
+                urls?: string[];
+                format?: string;
+                query?: string;
+            } & {
+                [key: string]: unknown;
+            };
+            results: components["schemas"]["ExtractResult"][];
+            failed: components["schemas"]["ExtractFailure"][];
+            meta: {
+                request_id: string;
+                credits_used: number;
+                latency_ms?: number;
+                succeeded: number;
+                failed: number;
+            };
+        };
+        CrawlRequest: {
+            /**
+             * Format: uri
+             * @description Start page (always read: path filters and robots.txt apply to the pages found from it)
+             */
+            url: string;
+            /**
+             * @description Maximum pages read (and credits reserved)
+             * @default 25
+             */
+            limit?: number;
+            /**
+             * @description Link hops from url (sitemap pages count as 1 hop; 0 reads only url)
+             * @default 2
+             */
+            max_depth?: number;
+            /** @description Regular expressions matched against the URL path; follow only paths matching one */
+            include_paths?: string[];
+            /** @description Regular expressions matched against the URL path; never follow paths matching one */
+            exclude_paths?: string[];
+            /** @default false */
+            include_subdomains?: boolean;
+            /**
+             * @description `include` also seeds the crawl with the site's sitemap URLs (after the start page's links), `only` reads the start page and sitemap URLs without following links, `skip` follows links only
+             * @default include
+             * @enum {string}
+             */
+            sitemap?: "include" | "only" | "skip";
+            /** @description Read the pages most relevant to these words first (best-first crawl) */
+            query?: string;
+            /**
+             * @description Treat URLs that differ only in their query string as one page
+             * @default false
+             */
+            ignore_query_parameters?: boolean;
+            /**
+             * @default markdown
+             * @enum {string}
+             */
+            format?: "markdown" | "text";
+            /**
+             * @description Return each page's outbound links
+             * @default false
+             */
+            include_links?: boolean;
+            /** @description Trim each page to this many tokens */
+            max_tokens?: number;
+            /** @description Accept cached pages up to this many seconds old (0.5 credit each) */
+            max_age?: number;
+            /**
+             * Format: uri
+             * @description Receives the signed `crawl.completed` event. Defaults to the account webhook
+             */
+            webhook_url?: string;
+        };
+        /** @enum {string} */
+        TaskStatus: "queued" | "running" | "completed" | "failed" | "canceled";
+        TaskCreated: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "crawl";
+            status: components["schemas"]["TaskStatus"];
+            /** Format: date-time */
+            created_at: string;
+            poll_url: string;
+            credits_reserved: number;
+            webhook_url?: string | null;
+        };
+        TaskCancelResponse: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "canceled" | "canceling";
+        };
+        /** @description Set when the task failed or was canceled */
+        TaskError: {
+            /**
+             * @example no_pages
+             * @example canceled
+             * @example timeout
+             * @example internal
+             */
+            code?: string;
+            message?: string;
+        } | null;
+        CrawlPage: {
+            url: string;
+            /** @description Link hops from the start page */
+            depth: number;
+            title?: string;
+            markdown?: string;
+            text?: string;
+            published_at?: string;
+            metadata?: components["schemas"]["PageMetadata"];
+            links?: components["schemas"]["PageLink"][];
+        };
+        CrawlResult: {
+            url: string;
+            pages: components["schemas"]["CrawlPage"][];
+            failed: components["schemas"]["ExtractFailure"][];
+            stats: {
+                pages?: number;
+                failed?: number;
+                seconds?: number;
+                /** @description Unique URLs found that passed the filters */
+                discovered?: number;
+                /** @description Found but not read when the crawl ended */
+                queued?: number;
+                /** @description Pages that redirected to a page already read (not charged) */
+                duplicates?: number;
+                /** @description URLs taken from sitemaps */
+                sitemap_urls?: number;
+                /**
+                 * @description The start host's robots.txt
+                 * @enum {string}
+                 */
+                robots?: "found" | "missing" | "unreachable" | "none";
+                /** @description Disallow rules in force on the start host */
+                robots_disallowed?: number;
+                /** @description URLs skipped because robots.txt disallows them */
+                robots_blocked?: number;
+                /** @description The start host's Crawl-delay, honoured */
+                crawl_delay_ms?: number;
+                /**
+                 * @description Why the crawl ended
+                 * @enum {string}
+                 */
+                stopped?: "done" | "limit" | "time_limit" | "size_limit" | "too_many_failures" | "canceled";
+            };
+        };
+        CrawlTask: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "crawl";
+            status: components["schemas"]["TaskStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            credits_reserved: number;
+            credits_used: number;
+            /** @enum {string|null} */
+            webhook_status?: "pending" | "delivered" | "failed" | null;
+            progress?: ({
+                pages_done?: number;
+                pages_failed?: number;
+                pages_queued?: number;
+                pages_discovered?: number;
+                limit?: number;
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            /** @description Set once the crawl ends (also on cancel, with the pages read so far) */
+            result?: components["schemas"]["CrawlResult"] | null;
+            error?: components["schemas"]["TaskError"];
+        };
+        MapRequest: {
+            /**
+             * Format: uri
+             * @description The site (any page of it; sitemaps are read from its origin)
+             */
+            url: string;
+            /** @description Keep only URLs relevant to these words, most relevant first */
+            search?: string;
+            /** @default 100 */
+            limit?: number;
+            /** @default false */
+            include_subdomains?: boolean;
+            /** @description Regular expressions matched against the URL path; keep only URLs matching one */
+            include_paths?: string[];
+            /** @description Regular expressions matched against the URL path; drop URLs matching one */
+            exclude_paths?: string[];
+            /**
+             * @description Treat URLs that differ only in their query string as one (the first one found is kept)
+             * @default false
+             */
+            ignore_query_parameters?: boolean;
+            /**
+             * @description `include` sitemaps and the start page's links, `only` sitemaps, `skip` sitemaps (links only)
+             * @default include
+             * @enum {string}
+             */
+            sitemap?: "include" | "only" | "skip";
+        };
+        MapURL: {
+            url: string;
+            title?: string;
+            /** @description The sitemap's lastmod, as written */
+            lastmod?: string;
+            /** @enum {string} */
+            source: "sitemap" | "page";
+        };
+        MapResponse: {
+            request: {
+                /** @constant */
+                endpoint?: "map";
+                url?: string;
+                search?: string;
+                limit?: number;
+                sitemap?: string;
+                include_subdomains?: boolean;
+                include_paths?: string[];
+                exclude_paths?: string[];
+                ignore_query_parameters?: boolean;
+            } & {
+                [key: string]: unknown;
+            };
+            results: components["schemas"]["MapURL"][];
+            meta: {
+                request_id: string;
+                credits_used: number;
+                latency_ms?: number;
+                count: number;
+            };
         };
         /**
          * @description A search provider (docs/providers). Which verticals each serves depends on the deployment.
@@ -630,6 +1235,10 @@ export interface components {
             device?: string;
             autocorrect?: boolean;
             tbs?: string;
+            /** Format: date */
+            start_date?: string;
+            /** Format: date */
+            end_date?: string;
             safe?: string;
             place_id?: string;
             cid?: string;
@@ -637,6 +1246,10 @@ export interface components {
             sort?: string;
             include_content?: number;
             format?: string;
+            include_domains?: string[];
+            exclude_domains?: string[];
+            boost_domains?: string[];
+            highlights?: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -661,8 +1274,16 @@ export interface components {
             };
             rating?: number;
             rating_count?: number;
+            /**
+             * @description `date` as an ISO 8601 date or date-time when it parses (relative dates resolved against the fetch time)
+             * @example 2026-09-30
+             * @example 2026-10-03T09:00:00Z
+             */
+            published_at?: string;
             /** @description Page Markdown when include_content covered this result */
             content?: string;
+            /** @description highlights=true only. Query-ranked passages of the fetched page, best first (instead of content) */
+            highlights?: components["schemas"]["Highlight"][];
             /**
              * @description engine=consensus only. The providers that returned this result, in route order; results are ranked by how many there are
              * @example [
@@ -740,6 +1361,8 @@ export interface components {
             source?: string;
             channel?: string;
             date?: string;
+            /** @description `date` as ISO 8601 when it parses */
+            published_at?: string;
         };
         VideosResponse: {
             request: components["schemas"]["RequestEcho"];
@@ -753,6 +1376,8 @@ export interface components {
             domain?: string;
             snippet?: string;
             date?: string;
+            /** @description `date` as ISO 8601 when it parses */
+            published_at?: string;
             source?: string;
             image_url?: string;
         };
@@ -885,6 +1510,20 @@ export interface components {
             image?: string;
             published_time?: string;
             author?: string;
+            /**
+             * @description The page's media type
+             * @example text/html
+             * @example application/pdf
+             */
+            content_type?: string;
+            /** @description Page count of a PDF */
+            pages?: number;
+        };
+        PageLink: {
+            /** @description Absolute URL */
+            url: string;
+            /** @description Anchor text */
+            text?: string;
         };
         WebpageResponse: {
             request: components["schemas"]["RequestEcho"];
@@ -896,6 +1535,10 @@ export interface components {
             /** @description Only with include_html=true */
             html?: string;
             metadata: components["schemas"]["PageMetadata"];
+            /** @description include_links=true only. Outbound links in document order, deduplicated */
+            links?: components["schemas"]["PageLink"][];
+            /** @description include_images=true only. Image URLs in document order */
+            image_links?: string[];
             meta: components["schemas"]["Meta"];
         };
         CSEResponse: {
@@ -1035,6 +1678,243 @@ export interface components {
                 requests: number;
             };
         };
+        /** @description Body of `crawl.completed` */
+        TaskCompletedEvent: {
+            /** @constant */
+            event: "crawl.completed";
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "crawl";
+            status: components["schemas"]["TaskStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            completed_at?: string | null;
+            credits_used: number;
+            /** @description Where the task (and its full result) can be fetched for 24 hours */
+            poll_url?: string;
+            /** @description The CrawlResult (null when the crawl failed without one, or when it is larger than 4 MB: see result_omitted) */
+            result?: unknown;
+            /** @description Set when the result was too large for the webhook; GET poll_url for it */
+            result_omitted?: boolean;
+            error?: {
+                code?: string;
+                message?: string;
+            };
+        };
+        /** @description The saved request a monitor reruns: a search (q and options) or, for webpage monitors, url (and country) */
+        MonitorSearch: {
+            q?: string;
+            url?: string;
+            country?: string;
+            language?: string;
+            location?: string;
+            /** @enum {string} */
+            time?: "hour" | "day" | "week" | "month" | "year";
+            num?: number;
+            device?: string;
+            safe?: string;
+            include_domains?: string[];
+            exclude_domains?: string[];
+            engine?: string[];
+        };
+        /** @description Search and news monitors need `q`; webpage monitors need `url` and take only `country` besides */
+        MonitorCreateRequest: {
+            q?: string;
+            /**
+             * Format: uri
+             * @description endpoint=webpage: the page to watch for content changes
+             */
+            url?: string;
+            /**
+             * @default search
+             * @enum {string}
+             */
+            endpoint?: "search" | "news" | "webpage";
+            /** @description Your own JSON object (at most 2 KB), echoed on the monitor and in its webhooks */
+            metadata?: {
+                [key: string]: unknown;
+            };
+            name?: string;
+            /**
+             * @default daily
+             * @enum {string}
+             */
+            interval?: "hourly" | "daily" | "weekly";
+            /** @description Overrides interval */
+            interval_seconds?: number;
+            /**
+             * Format: uri
+             * @description Receives signed `monitor.results` events. Without one, read new results from the run history
+             */
+            webhook_url?: string;
+            /**
+             * @description false creates the monitor paused
+             * @default true
+             */
+            active?: boolean;
+            country?: string;
+            language?: string;
+            location?: string;
+            /** @enum {string} */
+            time?: "hour" | "day" | "week" | "month" | "year";
+            num?: number;
+            /** @enum {string} */
+            device?: "desktop" | "mobile";
+            /** @enum {string} */
+            safe?: "active" | "off";
+            include_domains?: components["schemas"]["DomainList"];
+            exclude_domains?: components["schemas"]["DomainList"];
+            engine?: components["schemas"]["EngineParam"];
+        };
+        /** @description Only the fields sent change. Search fields are merged into the saved search; a changed search (or endpoint) makes the next run report every result as new. */
+        MonitorUpdateRequest: {
+            name?: string;
+            /** @enum {string} */
+            interval?: "hourly" | "daily" | "weekly";
+            interval_seconds?: number;
+            /** @description A webhook URL, or an empty string to remove it */
+            webhook_url?: string;
+            /** @description true resumes a paused monitor (due now, failure streak cleared) */
+            active?: boolean;
+            /** @description Replaces the metadata (null clears it) */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * @description Switching between a search and a page drops the other kind's fields
+             * @enum {string}
+             */
+            endpoint?: "search" | "news" | "webpage";
+            q?: string;
+            /**
+             * Format: uri
+             * @description endpoint=webpage only
+             */
+            url?: string;
+            country?: string;
+            language?: string;
+            location?: string;
+            /** @enum {string} */
+            time?: "hour" | "day" | "week" | "month" | "year";
+            num?: number;
+            /** @enum {string} */
+            device?: "desktop" | "mobile";
+            /** @enum {string} */
+            safe?: "active" | "off";
+            include_domains?: components["schemas"]["DomainList"];
+            exclude_domains?: components["schemas"]["DomainList"];
+            engine?: components["schemas"]["EngineParam"];
+        };
+        Monitor: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @enum {string} */
+            endpoint: "search" | "news" | "webpage";
+            request: components["schemas"]["MonitorSearch"];
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            interval_seconds: number;
+            /** @description Null when new results are only kept in the run history */
+            webhook_url: string | null;
+            active: boolean;
+            /** Format: date-time */
+            next_run_at: string;
+            /** Format: date-time */
+            last_run_at?: string | null;
+            /** @enum {string|null} */
+            last_status?: "ok" | "error" | "webhook_failed" | "paused" | null;
+            last_error?: string | null;
+            /** @description New results found by the last run */
+            last_new_results?: number;
+            runs: number;
+            /** @description Failed runs in a row; the monitor pauses itself at 10 */
+            consecutive_failures: number;
+            /** @description Total over all runs */
+            credits_used: number;
+            /** Format: date-time */
+            created_at: string;
+        };
+        MonitorRun: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "ok" | "error" | "webhook_failed" | "paused";
+            error?: string | null;
+            new_results: number;
+            /** @description The new results (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage); null when there were none or after 24 hours */
+            results?: {
+                [key: string]: unknown;
+            }[] | null;
+            credits_used: number;
+            /**
+             * @description none = the monitor has no webhook; null = nothing to send
+             * @enum {string|null}
+             */
+            webhook_status?: "delivered" | "failed" | "none" | null;
+            /** Format: date-time */
+            created_at: string;
+        };
+        /** @description What a webpage monitor reports when the page is new to it or its content changed */
+        MonitorPageChange: {
+            /** @description Final URL after redirects */
+            url: string;
+            title?: string;
+            /** @enum {string} */
+            change: "new" | "changed";
+            /** @description Fingerprint of the content (whitespace-insensitive) */
+            content_hash: string;
+            /** @description The page's Markdown (up to about 8 */
+            markdown: string;
+            published_at?: string;
+        };
+        MonitorRunList: {
+            results: components["schemas"]["MonitorRun"][];
+            /**
+             * Format: uuid
+             * @description Pass as `before` for the next page; null on the last page
+             */
+            next_before: string | null;
+        };
+        MonitorList: {
+            results: components["schemas"]["Monitor"][];
+        };
+        /** @description Body of `monitor.results` */
+        MonitorResultsEvent: {
+            /** @constant */
+            event: "monitor.results";
+            /** Format: uuid */
+            monitor_id: string;
+            /**
+             * Format: uuid
+             * @description Also the X-SerpKite-Delivery header; use it to deduplicate retries
+             */
+            run_id: string;
+            name: string;
+            /** @enum {string} */
+            endpoint: "search" | "news" | "webpage";
+            /** @description The saved query (empty for webpage monitors) */
+            q: string;
+            /** @description webpage monitors only */
+            url?: string;
+            /** @description The monitor's metadata */
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+            /** @description The first run since the monitor was created or its search changed */
+            first_run: boolean;
+            /** Format: date-time */
+            run_at: string;
+            /** @description Results not seen in earlier runs (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage) */
+            new_results: {
+                [key: string]: unknown;
+            }[];
+            /** @description This run's price */
+            credits_used: number;
+        };
     };
     responses: {
         /** @description Error */
@@ -1060,6 +1940,40 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description Queued. Poll `poll_url` or wait for the webhook */
+        TaskAccepted: {
+            headers: {
+                /** @description The maximum price, reserved until the task ends */
+                "X-Credits-Reserved"?: number;
+                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                /** @description Path of the task (`/v1/{kind}/{id}`) */
+                Location?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "id": "01926a3e-7b2c-7c4e-9f1a-2b3c4d5e6f70",
+                 *       "kind": "crawl",
+                 *       "status": "queued",
+                 *       "created_at": "2026-10-03T12:00:00Z",
+                 *       "poll_url": "https://api.serpkite.com/v1/crawl/01926a3e-7b2c-7c4e-9f1a-2b3c4d5e6f70",
+                 *       "credits_reserved": 50,
+                 *       "webhook_url": null
+                 *     }
+                 */
+                "application/json": components["schemas"]["TaskCreated"];
+            };
+        };
+        /** @description `canceled` (it was queued: refunded at once) or `canceling` (it is running and stops at its next checkpoint) */
+        TaskCanceled: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["TaskCancelResponse"];
             };
         };
         /** @description OK (text/markdown when format=markdown) */
@@ -1222,6 +2136,115 @@ export interface components {
                 "text/markdown": string;
             };
         };
+        /** @description OK */
+        ExtractOK: {
+            headers: {
+                "X-Credits-Used": components["headers"]["CreditsUsed"];
+                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                "X-Cost-USD": components["headers"]["CostUSD"];
+                "X-Cache": components["headers"]["Cache"];
+                "X-Latency-Ms": components["headers"]["LatencyMs"];
+                "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "request": {
+                 *         "endpoint": "extract",
+                 *         "urls": [
+                 *           "https://example.com/pricing",
+                 *           "https://example.com/missing"
+                 *         ],
+                 *         "format": "markdown",
+                 *         "query": "enterprise price"
+                 *       },
+                 *       "results": [
+                 *         {
+                 *           "url": "https://example.com/pricing",
+                 *           "status_code": 200,
+                 *           "title": "Pricing",
+                 *           "metadata": {
+                 *             "title": "Pricing",
+                 *             "content_type": "text/html"
+                 *           },
+                 *           "cached": false,
+                 *           "markdown": "# Pricing\n\n…",
+                 *           "highlights": [
+                 *             {
+                 *               "text": "Enterprise: $499 per month …",
+                 *               "score": 4.83,
+                 *               "heading": "Plans"
+                 *             }
+                 *           ]
+                 *         }
+                 *       ],
+                 *       "failed": [
+                 *         {
+                 *           "url": "https://example.com/missing",
+                 *           "error": {
+                 *             "code": "upstream_error",
+                 *             "message": "could not fetch the page: the site answered 404; you were not charged"
+                 *           }
+                 *         }
+                 *       ],
+                 *       "meta": {
+                 *         "request_id": "req_01J9",
+                 *         "credits_used": 1,
+                 *         "latency_ms": 2210,
+                 *         "succeeded": 1,
+                 *         "failed": 1
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ExtractResponse"];
+            };
+        };
+        /** @description OK */
+        MapOK: {
+            headers: {
+                "X-Credits-Used": components["headers"]["CreditsUsed"];
+                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                "X-Cost-USD": components["headers"]["CostUSD"];
+                "X-Cache": components["headers"]["Cache"];
+                "X-Latency-Ms": components["headers"]["LatencyMs"];
+                "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "request": {
+                 *         "endpoint": "map",
+                 *         "url": "https://docs.example.com/",
+                 *         "limit": 50,
+                 *         "sitemap": "include",
+                 *         "include_subdomains": false,
+                 *         "search": "install guide"
+                 *       },
+                 *       "results": [
+                 *         {
+                 *           "url": "https://docs.example.com/install",
+                 *           "lastmod": "2026-09-01",
+                 *           "source": "sitemap"
+                 *         },
+                 *         {
+                 *           "url": "https://docs.example.com/guide",
+                 *           "title": "Guide",
+                 *           "source": "page"
+                 *         }
+                 *       ],
+                 *       "meta": {
+                 *         "request_id": "req_01J9",
+                 *         "credits_used": 1,
+                 *         "latency_ms": 840,
+                 *         "count": 2
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["MapResponse"];
+            };
+        };
         /** @description OK (text/markdown when format=markdown) */
         WebpageOK: {
             headers: {
@@ -1284,6 +2307,16 @@ export interface operations {
                 max_age?: number;
                 /** @description google (default), auto, consensus, one provider, or a comma-separated list (e.g. google,brave) */
                 engine?: string;
+                /** @description Comma-separated domains, or the key repeated (see SearchRequest.include_domains) */
+                include_domains?: string;
+                /** @description Comma-separated domains, or the key repeated */
+                exclude_domains?: string;
+                /** @description Comma-separated domains, or the key repeated */
+                boost_domains?: string;
+                start_date?: string;
+                end_date?: string;
+                /** @description Needs include_content */
+                highlights?: boolean;
                 api_key?: string;
             };
             header?: never;
@@ -1523,6 +2556,340 @@ export interface operations {
             403: components["responses"]["Error"];
             429: components["responses"]["Error"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    extract: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "urls": [
+                 *         "https://example.com/pricing",
+                 *         "https://example.com/docs/limits.pdf"
+                 *       ],
+                 *       "query": "enterprise price",
+                 *       "highlights": 2
+                 *     }
+                 */
+                "application/json": components["schemas"]["ExtractRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["ExtractOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    map: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "url": "https://docs.example.com/",
+                 *       "search": "install guide",
+                 *       "limit": 50
+                 *     }
+                 */
+                "application/json": components["schemas"]["MapRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["MapOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createCrawl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "url": "https://docs.example.com/",
+                 *       "limit": 50,
+                 *       "max_depth": 2,
+                 *       "include_paths": [
+                 *         "^/guides/"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["CrawlRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["TaskAccepted"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getCrawl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CrawlTask"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    cancelCrawl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["TaskCanceled"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    listMonitors: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorList"];
+                };
+            };
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    createMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "q": "ai agents",
+                 *       "endpoint": "news",
+                 *       "interval": "hourly",
+                 *       "name": "agents news",
+                 *       "webhook_url": "https://example.com/hooks/serpkite"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MonitorCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    getMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    deleteMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    updateMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "active": false,
+                 *       "interval": "daily"
+                 *     }
+                 */
+                "application/json": components["schemas"]["MonitorUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    listMonitorRuns: {
+        parameters: {
+            query?: {
+                limit?: number;
+                /** @description `next_before` of the previous page */
+                before?: string;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonitorRunList"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    runMonitor: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scheduled */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Monitor"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     customSearch: {
@@ -1778,6 +3145,50 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Error"];
+        };
+    };
+    crawlCompletedWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCompletedEvent"];
+            };
+        };
+        responses: {
+            /** @description Any 2xx acknowledges the delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    monitorResultsWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MonitorResultsEvent"];
+            };
+        };
+        responses: {
+            /** @description Any 2xx acknowledges the delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
 }
