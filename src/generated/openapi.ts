@@ -726,7 +726,7 @@ export interface components {
         SearchRequest: {
             q: string;
             /**
-             * @description Country code (ISO 3166-1 alpha-2, case-insensitive; uk is accepted as gb). When omitted and location ends in a country name, that country is used. Russia (ru) uses isolated Russian proxy exits across all search verticals, including patents; those exits never serve other countries
+             * @description Country code (ISO 3166-1 alpha-2, case-insensitive; uk is accepted as gb). When omitted and location ends in a country name, that country is used. Russia (ru) is supported across all search verticals, including patents, using the shared proxy routes
              * @default us
              */
             country?: string;
