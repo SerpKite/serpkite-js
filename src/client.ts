@@ -337,7 +337,8 @@ export class SerpKite {
       });
     },
 
-    /** Runs the monitor at the next scheduler poll (within about 30 seconds). */
+    /** Runs an active monitor at the next scheduler poll (within about 30 seconds).
+     * Paused monitors return 409; update(id, { active: true }) resumes and schedules them. */
     run: (id: string, options?: RequestOptions): Promise<Monitor> =>
       this.request({
         method: "POST",

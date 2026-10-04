@@ -481,7 +481,9 @@ export interface paths {
         put?: never;
         /**
          * Run a monitor now (it becomes due at the next scheduler poll, within about 30 seconds)
-         * @description The monitor is bound to the calling key, which this and later runs are billed to.
+         * @description The monitor must be active. A paused monitor returns 409; resume it with
+         *     PATCH {"active": true} first (resuming also makes it due immediately).
+         *     The monitor is bound to the calling key, which this and later runs are billed to.
          */
         post: operations["runMonitor"];
         delete?: never;
@@ -2889,6 +2891,7 @@ export interface operations {
             };
             401: components["responses"]["Error"];
             404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
             429: components["responses"]["Error"];
         };
     };
