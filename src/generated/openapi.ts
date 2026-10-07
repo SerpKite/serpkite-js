@@ -1617,7 +1617,9 @@ export interface components {
                 requests: number;
                 /** @description Share of requests without a 5xx (0-1) */
                 success_rate: number;
+                /** @description Median latency of successful (non-error) responses; 0 when none succeeded */
                 p50_ms: number;
+                /** @description 95th-percentile latency of successful (non-error) responses; 0 when none succeeded */
                 p95_ms: number;
             }[];
         };
