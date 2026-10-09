@@ -640,8 +640,50 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, scholar, webpage */
+        /**
+         * Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, scholar, webpage
+         * @description Authenticates with an API key (`Authorization: Bearer skt_live_…`) or an
+         *     OAuth 2.1 access token (`skt_oat_…`) issued by app-api.serpkite.com for
+         *     this resource (MCP authorization spec). Without a valid credential the
+         *     401 carries `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource/v1/mcp", scope="mcp"`
+         *     (plus `error="invalid_token"` when a credential was rejected). OAuth
+         *     access tokens are only accepted here, not on the REST endpoints.
+         */
         post: operations["mcp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource/v1/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth protected resource metadata for the MCP server (RFC 9728) */
+        get: operations["mcpProtectedResourceMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/.well-known/oauth-protected-resource": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** OAuth protected resource metadata (root form; same document) */
+        get: operations["protectedResourceMetadata"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -724,6 +766,25 @@ export interface components {
                 message: string;
                 request_id?: string;
             };
+        };
+        /** @description RFC 9728 protected resource metadata */
+        ProtectedResourceMetadata: {
+            /**
+             * Format: uri
+             * @example https://api.serpkite.com/v1/mcp
+             */
+            resource: string;
+            /**
+             * @example [
+             *       "https://app-api.serpkite.com"
+             *     ]
+             */
+            authorization_servers: string[];
+            scopes_supported?: string[];
+            bearer_methods_supported?: string[];
+            resource_name?: string;
+            /** Format: uri */
+            resource_documentation?: string;
         };
         SearchRequest: {
             q: string;
@@ -3149,7 +3210,57 @@ export interface operations {
                 };
                 content?: never;
             };
-            401: components["responses"]["Error"];
+            /** @description Missing, invalid, expired or revoked credential */
+            401: {
+                headers: {
+                    /** @description RFC 9728 challenge pointing at the protected resource metadata */
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    mcpProtectedResourceMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceMetadata"];
+                };
+            };
+        };
+    };
+    protectedResourceMetadata: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProtectedResourceMetadata"];
+                };
+            };
         };
     };
     crawlCompletedWebhook: {
