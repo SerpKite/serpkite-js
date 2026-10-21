@@ -898,9 +898,9 @@ export interface components {
             /** @description Accept a cached result up to this many seconds old (50% of credits on a hit) */
             max_age?: number;
             engine?: components["schemas"]["EngineParam"];
-            /** @description Only results from these domains (search, news, images, videos). Compiled into site: operators and enforced on the results. Not with engine=consensus */
+            /** @description Only results from these domains (search, news, images, videos). Compiled into site: operators and enforced on the results. With engine=consensus, every provider gets the operators and only providers with a remaining result are billed */
             include_domains?: components["schemas"]["DomainList"];
-            /** @description Drop results from these domains (search, news, images, videos). Not with engine=consensus */
+            /** @description Drop results from these domains (search, news, images, videos) */
             exclude_domains?: components["schemas"]["DomainList"];
             /** @description Move results from these domains to the top, keeping the order within both groups (search, news) */
             boost_domains?: components["schemas"]["DomainList"];
@@ -1267,7 +1267,7 @@ export interface components {
              * @description The site (any page of it; sitemaps are read from its origin)
              */
             url: string;
-            /** @description Keep only URLs relevant to these words, most relevant first */
+            /** @description Keep only URLs relevant to these words, most relevant first. When the sitemap lists fewer than 50 URLs, up to 8 of the start page's links are read too, one level deeper */
             search?: string;
             /** @default 100 */
             limit?: number;
@@ -1325,7 +1325,7 @@ export interface components {
          * @enum {string}
          */
         Provider: "google" | "brave" | "bing" | "yahoo" | "duckduckgo" | "mojeek" | "wikipedia" | "yandex";
-        /** @description Which search providers may answer. `google` (the default) is Google only; within Google, SerpKite always fails over across its own proxy pools. `auto` allows falling back to other enabled providers, in route order, when Google is blocked or times out. A single other provider (`brave`) or a list (`["google","brave"]`, or `google,brave` in a query string) restricts the request to those providers. `meta.engine` always names the provider that answered and credits follow that provider's price. A key with "Allow fallback to other search engines" on treats a request without `engine` as `auto`. `consensus` (`/v1/search` only; 400 elsewhere, and it can't be combined with other names) queries several independent search indexes in parallel (at most one Bing-backed provider, so Yahoo or DuckDuckGo never count as agreeing with Bing), merges the results by URL and ranks them by how many providers returned each one. Each result lists its `sources`; `meta.engine` is `consensus` and `meta.route` lists every provider attempt. It stops once `num` unique results are in hand or after a few seconds, and costs the sum of one page at each provider that returned results (providers that failed, came back empty or were never started are free). `yandex` serves `/v1/maps`, `/v1/places` and `/v1/place` from Yandex Maps where the deployment enables it (otherwise a 503 `unavailable`, not charged); with `auto` it is the last fallback there. */
+        /** @description Which search providers may answer. `google` (the default) is Google only; within Google, SerpKite always fails over across its own proxy pools. `auto` allows falling back to other enabled providers, in route order, when Google is blocked or times out. A single other provider (`brave`) or a list (`["google","brave"]`, or `google,brave` in a query string) restricts the request to those providers. `meta.engine` always names the provider that answered and credits follow that provider's price. A key with "Allow fallback to other search engines" on treats a request without `engine` as `auto`. `consensus` (`/v1/search` only; 400 elsewhere, and it can't be combined with other names) queries several independent search indexes in parallel (at most one Bing-backed provider, so Yahoo or DuckDuckGo never count as agreeing with Bing), merges the results by URL and ranks them by how many providers returned each one. Each result lists its `sources`; `meta.engine` is `consensus` and `meta.route` lists every provider attempt. Up to three providers answer: a provider that fails or comes back empty hands its turn to the next one in the route. It stops once `num` unique results are in hand or after a few seconds, and costs the sum of one page at each provider that returned results (providers that failed, came back empty or were never started are free). `yandex` serves `/v1/maps`, `/v1/places` and `/v1/place` from Yandex Maps where the deployment enables it (otherwise a 503 `unavailable`, not charged); with `auto` it is the last fallback there. */
         EngineParam: string | components["schemas"]["Provider"][];
         /** @description One provider attempt behind this answer. Proxy pools are internal and never listed. */
         RouteStep: {
