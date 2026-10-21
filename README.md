@@ -87,7 +87,7 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `news(params)` | `POST /v1/news` | `SearchParams` | `NewsResponse` |
 | `maps(params)` | `POST /v1/maps` | `SearchParams` (+ `ll`: `"@lat,lng,14z"`) | `PlacesResponse` |
 | `places(params)` | `POST /v1/places` | `SearchParams` | `PlacesResponse` |
-| `place(params)` | `POST /v1/place` | `PlaceParams` (`place_id` \| `cid` \| `fid`, `country`, `language`) | `PlacesResponse` (one place: `weekly_hours`, `photos`, `timezone`, …; empty when the id is unknown) |
+| `place(params)` | `POST /v1/place` | `PlaceParams` (`place_id` \| `cid` \| `fid` \| `oid` (Yandex Maps), `country`, `language`) | `PlacesResponse` (one place: `weekly_hours`, `photos`, `timezone`, …; empty when the id is unknown) |
 | `reviews(params)` | `POST /v1/reviews` | `ReviewsParams` (`place_id` \| `cid` \| `fid`, `sort`, `page_token`, `num` ≤ 50) | `ReviewsResponse` (+ `next_page_token`) |
 | `shopping(params)` | `POST /v1/shopping` | `SearchParams` | `ShoppingResponse` |
 | `scholar(params)` | `POST /v1/scholar` | `SearchParams` | `ScholarResponse` |

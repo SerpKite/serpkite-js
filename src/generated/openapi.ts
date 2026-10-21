@@ -167,6 +167,13 @@ export interface paths {
          *     (or `uule`) searches the named place. Without either, Google picks the area from the
          *     query (an exact name or address) or from where the request comes from, so local queries
          *     such as "coffee" need `location` or `ll`.
+         *
+         *     **Yandex Maps:** with `engine=yandex` (where the deployment enables it) the results come
+         *     from Yandex Maps, which covers Russia and the CIS in depth. They have the same fields,
+         *     with the Yandex organisation id in `oid` (for `/v1/place`) and `yandex_maps_url` instead
+         *     of Google's identifiers; categories, addresses and hours follow `language` (`ru` for
+         *     Russian). Pass `ll` or a `location` (a city, appended to the query); `uule` and `tbs`
+         *     are refused.
          */
         post: operations["maps"];
         delete?: never;
@@ -205,11 +212,16 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Details of one place (by `place_id`, `cid` or `fid`); 1 credit
+         * Details of one place (by `place_id`, `cid`, `fid` or Yandex `oid`); 1 credit
          * @description The full Google Maps listing of one place: address, country, coordinates, time zone,
          *     categories, opening hours (as text and as structured `weekly_hours`), website, phone,
          *     rating, description and photos, in `language`. `results` holds the place, or is empty
          *     (not charged) when no place has that identifier.
+         *
+         *     With `oid` (a Yandex Maps organisation id, e.g. from an `engine=yandex` maps result or
+         *     `yandex.ru/maps/org/<name>/<oid>/`) the listing comes from Yandex Maps, where the
+         *     deployment enables it: `oid` implies `engine=yandex` and can't be combined with Google's
+         *     identifiers. Closed listings (temporarily or permanently) carry no hours.
          */
         post: operations["place"];
         delete?: never;
@@ -943,7 +955,7 @@ export interface components {
             fields?: string;
             max_age?: number;
         };
-        /** @description One of place_id, cid or fid is required (place_id wins, then fid, then cid) */
+        /** @description One of place_id, cid or fid (Google; place_id wins, then fid, then cid) or oid (Yandex Maps) is required */
         PlaceRequest: {
             /** @description Google place id ("ChIJ…"), e.g. `place_id` of a /v1/maps result */
             place_id?: string;
@@ -951,6 +963,11 @@ export interface components {
             cid?: string;
             /** @description Feature id "0x…:0x…" (`fid` of a result) */
             fid?: string;
+            /**
+             * @description Yandex Maps organisation id (`oid` of an `engine=yandex` maps result). Implies `engine=yandex`; not with place_id, cid or fid
+             * @example 1045821788
+             */
+            oid?: string;
             /**
              * @description Country code (ISO 3166-1 alpha-2); Google's regional view of the listing
              * @default us
@@ -1307,8 +1324,8 @@ export interface components {
          * @description A search provider (docs/providers). Which verticals each serves depends on the deployment.
          * @enum {string}
          */
-        Provider: "google" | "brave" | "bing" | "yahoo" | "duckduckgo" | "mojeek" | "wikipedia";
-        /** @description Which search providers may answer. `google` (the default) is Google only; within Google, SerpKite always fails over across its own proxy pools. `auto` allows falling back to other enabled providers, in route order, when Google is blocked or times out. A single other provider (`brave`) or a list (`["google","brave"]`, or `google,brave` in a query string) restricts the request to those providers. `meta.engine` always names the provider that answered and credits follow that provider's price. A key with "Allow fallback to other search engines" on treats a request without `engine` as `auto`. `consensus` (`/v1/search` only; 400 elsewhere, and it can't be combined with other names) queries several independent search indexes in parallel (at most one Bing-backed provider, so Yahoo or DuckDuckGo never count as agreeing with Bing), merges the results by URL and ranks them by how many providers returned each one. Each result lists its `sources`; `meta.engine` is `consensus` and `meta.route` lists every provider attempt. It stops once `num` unique results are in hand or after a few seconds, and costs the sum of one page at each provider that returned results (providers that failed, came back empty or were never started are free). */
+        Provider: "google" | "brave" | "bing" | "yahoo" | "duckduckgo" | "mojeek" | "wikipedia" | "yandex";
+        /** @description Which search providers may answer. `google` (the default) is Google only; within Google, SerpKite always fails over across its own proxy pools. `auto` allows falling back to other enabled providers, in route order, when Google is blocked or times out. A single other provider (`brave`) or a list (`["google","brave"]`, or `google,brave` in a query string) restricts the request to those providers. `meta.engine` always names the provider that answered and credits follow that provider's price. A key with "Allow fallback to other search engines" on treats a request without `engine` as `auto`. `consensus` (`/v1/search` only; 400 elsewhere, and it can't be combined with other names) queries several independent search indexes in parallel (at most one Bing-backed provider, so Yahoo or DuckDuckGo never count as agreeing with Bing), merges the results by URL and ranks them by how many providers returned each one. Each result lists its `sources`; `meta.engine` is `consensus` and `meta.route` lists every provider attempt. It stops once `num` unique results are in hand or after a few seconds, and costs the sum of one page at each provider that returned results (providers that failed, came back empty or were never started are free). `yandex` serves `/v1/maps`, `/v1/places` and `/v1/place` from Yandex Maps where the deployment enables it (otherwise a 503 `unavailable`, not charged); with `auto` it is the last fallback there. */
         EngineParam: string | components["schemas"]["Provider"][];
         /** @description One provider attempt behind this answer. Proxy pools are internal and never listed. */
         RouteStep: {
@@ -1371,6 +1388,7 @@ export interface components {
             place_id?: string;
             cid?: string;
             fid?: string;
+            oid?: string;
             sort?: string;
             include_content?: number;
             format?: string;
@@ -1529,7 +1547,7 @@ export interface components {
             phone_number?: string;
             /** @example +44 20 7232 3010 */
             international_phone_number?: string;
-            /** @description Hours as Google displays them, keyed by English weekday (Monday … Sunday), in `language`, e.g. {"Monday": "7:30 am–6 pm", "Sunday": "Closed"} */
+            /** @description Hours as the provider displays them, keyed by English weekday (Monday … Sunday), in `language`, e.g. {"Monday": "7:30 am–6 pm", "Sunday": "Closed"}; Yandex Maps: 24-hour times ("08:00–22:00"), "Closed"/"выходной", "Open 24 hours"/"круглосуточно" */
             opening_hours?: {
                 [key: string]: string;
             };
@@ -1538,7 +1556,7 @@ export interface components {
             country?: string;
             /** @description IANA time zone of the place (Europe/Moscow) */
             timezone?: string;
-            /** @description Google's short description of the place, or the owner's, when Google shows one */
+            /** @description Google's short description of the place, or the owner's, when Google shows one; Yandex Maps' summary of the place when it has one */
             description?: string;
             /** @description Photos of the place (/v1/place; up to 10). The URLs are public and can be fetched server-side without cookies */
             photos?: components["schemas"]["PlacePhoto"][];
@@ -1548,12 +1566,17 @@ export interface components {
             place_id?: string;
             cid?: string;
             fid?: string;
+            /** @description Yandex Maps organisation id (engine=yandex), for /v1/place */
+            oid?: string;
+            /** @description The place on Yandex Maps (engine=yandex): https://yandex.ru/maps/org/<oid>/ */
+            yandex_maps_url?: string;
         };
         /**
-         * @description Opening hours per weekday, from Google's listing, as local times (`timezone`) in 24-hour HH:MM.
+         * @description Opening hours per weekday, from the provider's listing, as local times (`timezone`) in 24-hour HH:MM.
          *     A day that is closed is an empty list; a day open 24 hours is `[{"open": "00:00", "close": "24:00"}]`;
          *     a day with a break has several intervals. `close` is "24:00" at midnight, and an interval that
-         *     ends after midnight has `next_day: true` (e.g. 17:30–03:00). Days Google doesn't list are absent.
+         *     ends after midnight has `next_day: true` (e.g. 17:30–03:00). Days Google doesn't list are absent;
+         *     Yandex Maps lists all seven or none.
          */
         WeeklyHours: {
             monday?: components["schemas"]["HoursIntervals"];

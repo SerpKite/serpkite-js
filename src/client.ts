@@ -40,7 +40,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.5.0";
+export const VERSION = "0.6.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -177,12 +177,16 @@ export class SerpKite {
   readonly videos = this.#vertical<SearchParams, VideosResponse>("/v1/videos");
   /** Google News. */
   readonly news = this.#vertical<SearchParams, NewsResponse>("/v1/news");
-  /** Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,14z"). */
+  /**
+   * Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,14z"). With
+   * `engine: "yandex"` (where enabled) the places come from Yandex Maps and carry an `oid`.
+   */
   readonly maps = this.#vertical<SearchParams, PlacesResponse>("/v1/maps");
   /** Google local results. */
   readonly places = this.#vertical<SearchParams, PlacesResponse>("/v1/places");
   /**
-   * Details of one place by `place_id`, `cid` or `fid`: address, country, time zone, hours
+   * Details of one place by `place_id`, `cid` or `fid`, or by a Yandex Maps `oid` (implies
+   * `engine: "yandex"`): address, country, time zone, hours
    * (`opening_hours` text and structured `weekly_hours`), phones, description and photos.
    * `results` holds the place, or is empty (not charged) when no place has that id. 1 credit.
    */

@@ -34,7 +34,10 @@ export type SearchParams = Omit<Schemas["SearchRequest"], "engine"> & {
   engine?: Engine;
 };
 export type ReviewsParams = Schemas["ReviewsRequest"];
-/** Parameters of `place`: one of `place_id`, `cid` or `fid` (place_id wins, then fid, then cid). */
+/**
+ * Parameters of `place`: one of `place_id`, `cid` or `fid` (Google; place_id wins, then fid,
+ * then cid), or `oid` (a Yandex Maps organisation id, which implies `engine: "yandex"`).
+ */
 export type PlaceParams = Omit<Schemas["PlaceRequest"], "engine"> & {
   /** Search providers allowed to answer. Default `"google"`. See {@link Engine}. */
   engine?: Engine;

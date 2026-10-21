@@ -312,6 +312,31 @@ describe("SerpKite", () => {
     expect(m.seen[0].body).toEqual({ place_id: "ChIJ123", language: "en" });
   });
 
+  test("place by Yandex oid", async () => {
+    const body: PlacesResponse = {
+      request: { endpoint: "place", engine: "yandex", oid: "1045821788" },
+      results: [
+        {
+          position: 1,
+          title: "Кофемания",
+          country: "RU",
+          timezone: "Europe/Moscow",
+          weekly_hours: { monday: [{ open: "00:00", close: "24:00" }] },
+          oid: "1045821788",
+          yandex_maps_url: "https://yandex.ru/maps/org/1045821788/",
+        },
+      ],
+      meta: { request_id: "req_1", credits_used: 1, cached: false, engine: "yandex" },
+    };
+    const m = mockFetch(json(body));
+    const res = await client(m.fetch).place({ oid: "1045821788", language: "ru" });
+    expect(res.results[0]?.oid).toBe("1045821788");
+    expect(res.results[0]?.yandex_maps_url).toBe("https://yandex.ru/maps/org/1045821788/");
+    expect(m.seen[0].body).toEqual({ oid: "1045821788", language: "ru" });
+    await client(m.fetch).maps({ q: "кофейня", ll: "@55.7887,49.1221,15z", engine: "yandex" });
+    expect(m.seen[1].body).toEqual({ q: "кофейня", ll: "@55.7887,49.1221,15z", engine: "yandex" });
+  });
+
   test("webpage: links, images, PDF metadata and exit country", async () => {
     const m = mockFetch(
       json({
