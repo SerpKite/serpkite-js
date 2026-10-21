@@ -87,6 +87,7 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `news(params)` | `POST /v1/news` | `SearchParams` | `NewsResponse` |
 | `maps(params)` | `POST /v1/maps` | `SearchParams` (+ `ll`: `"@lat,lng,14z"`) | `PlacesResponse` |
 | `places(params)` | `POST /v1/places` | `SearchParams` | `PlacesResponse` |
+| `place(params)` | `POST /v1/place` | `PlaceParams` (`place_id` \| `cid` \| `fid`, `country`, `language`) | `PlacesResponse` (one place: `weekly_hours`, `photos`, `timezone`, …; empty when the id is unknown) |
 | `reviews(params)` | `POST /v1/reviews` | `ReviewsParams` (`place_id` \| `cid` \| `fid`, `sort`, `page_token`, `num` ≤ 50) | `ReviewsResponse` (+ `next_page_token`) |
 | `shopping(params)` | `POST /v1/shopping` | `SearchParams` | `ShoppingResponse` |
 | `scholar(params)` | `POST /v1/scholar` | `SearchParams` | `ScholarResponse` |
@@ -128,8 +129,12 @@ const lean = await sk.search({ q: "espresso", fields: "results.title,results.lin
 // Token-lean JSON for agents
 const compact = await sk.search({ q: "espresso", format: "compact" });
 
-// Reviews, paged
-let page = await sk.reviews({ place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4", sort: "newest" });
+// One place in full: structured hours, phones, time zone, photos
+const { results } = await sk.place({ place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4" });
+console.log(results[0]?.timezone, results[0]?.weekly_hours?.monday); // [{ open: "09:00", close: "17:00" }]
+
+// Reviews, paged (the first 10 of a place)
+let page = await sk.reviews({ place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4", num: 5 });
 while (page.next_page_token) {
   page = await sk.reviews({ place_id: "ChIJN1t_tDeuEmsRUsoyG83frY4", page_token: page.next_page_token });
 }
@@ -377,8 +382,9 @@ are never retried. `batches.create`, `crawl`, `monitors.create` and `monitors.ru
 Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `openapi-typescript`. Friendly aliases are exported: `SearchParams`, `SearchResponse`,
 `OrganicResult`, `AnswerBox`, `NewsResponse`, `NewsResult`, `ImagesResponse`, `PlacesResponse`,
-`ReviewsResponse`, `ShoppingResponse`, `ScholarResponse`, `PatentsResponse`,
-`AutocompleteResponse`, `WebpageResponse`, `RankResponse`,
+`PlaceParams`, `PlaceResult`, `WeeklyHours`, `HoursInterval`, `PlacePhoto`, `ReviewsResponse`,
+`ShoppingResponse`, `ScholarResponse`, `PatentsResponse`, `AutocompleteResponse`, `WebpageResponse`,
+`RankResponse`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse`, `MapResponse`, `ExtractResponse`, `CrawlParams`, `CrawlTask`, `CrawlResult`,
 `TaskCreated`, `Monitor`, `MonitorRun`, `MonitorPageChange`, `TaskCompletedEvent`,

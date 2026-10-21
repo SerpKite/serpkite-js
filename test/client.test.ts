@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import {
   isBatchError,
+  type PlacesResponse,
   parseRetryAfter,
   type ResponseInfo,
   type SearchResponse,
@@ -133,6 +134,7 @@ describe("SerpKite", () => {
     await sk.news({ q: "a" });
     await sk.maps({ q: "a", ll: "@40.7,-74,14z" });
     await sk.places({ q: "a" });
+    await sk.place({ cid: "123" });
     await sk.reviews({ place_id: "ChIJ", sort: "newest" });
     await sk.shopping({ q: "a" });
     await sk.scholar({ q: "a" });
@@ -142,13 +144,14 @@ describe("SerpKite", () => {
     await sk.rank({ q: "a", domain: "example.com", num: 50 });
     await sk.account();
     await sk.batches.get("b1");
-    expect(m.seen[8].body).toEqual({ q: "двигатель", country: "ru", language: "ru" });
+    expect(m.seen[9].body).toEqual({ q: "двигатель", country: "ru", language: "ru" });
     expect(m.seen.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual([
       "POST /v1/images",
       "POST /v1/videos",
       "POST /v1/news",
       "POST /v1/maps",
       "POST /v1/places",
+      "POST /v1/place",
       "POST /v1/reviews",
       "POST /v1/shopping",
       "POST /v1/scholar",
@@ -159,8 +162,8 @@ describe("SerpKite", () => {
       "GET /v1/account",
       "GET /v1/batches/b1",
     ]);
-    expect(m.seen[12].body).toBeUndefined();
-    expect(m.seen[12].headers.get("content-type")).toBeNull();
+    expect(m.seen[13].body).toBeUndefined();
+    expect(m.seen[13].headers.get("content-type")).toBeNull();
   });
 
   test("search controls: domains, dates, highlights, published_at", async () => {
@@ -274,6 +277,39 @@ describe("SerpKite", () => {
       include_paths: ["^/docs/"],
       limit: 50,
     });
+  });
+
+  test("place posts the id and types hours and photos", async () => {
+    const body: PlacesResponse = {
+      request: { endpoint: "place", engine: "google" },
+      results: [
+        {
+          position: 1,
+          title: "Ronnie Scott's",
+          international_phone_number: "+44 20 7439 0747",
+          country: "GB",
+          timezone: "Europe/London",
+          weekly_hours: {
+            monday: [{ open: "18:00", close: "03:00", next_day: true }],
+            sunday: [],
+          },
+          photos: [
+            { url: "https://lh5.googleusercontent.com/p/x", width: 1600, source: "business" },
+          ],
+          google_maps_url: "https://www.google.com/maps/place/?q=place_id:ChIJ123",
+          place_id: "ChIJ123",
+        },
+      ],
+      meta: { request_id: "req_1", credits_used: 1, cached: false },
+    };
+    const m = mockFetch(json(body));
+    const res = await client(m.fetch).place({ place_id: "ChIJ123", language: "en" });
+    const place = res.results[0];
+    expect(place?.weekly_hours?.monday?.[0]?.next_day).toBe(true);
+    expect(place?.weekly_hours?.sunday).toEqual([]);
+    expect(place?.photos?.[0]?.source).toBe("business");
+    expect(new URL(m.seen[0].url).pathname).toBe("/v1/place");
+    expect(m.seen[0].body).toEqual({ place_id: "ChIJ123", language: "en" });
   });
 
   test("webpage: links, images, PDF metadata and exit country", async () => {

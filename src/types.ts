@@ -34,6 +34,11 @@ export type SearchParams = Omit<Schemas["SearchRequest"], "engine"> & {
   engine?: Engine;
 };
 export type ReviewsParams = Schemas["ReviewsRequest"];
+/** Parameters of `place`: one of `place_id`, `cid` or `fid` (place_id wins, then fid, then cid). */
+export type PlaceParams = Omit<Schemas["PlaceRequest"], "engine"> & {
+  /** Search providers allowed to answer. Default `"google"`. See {@link Engine}. */
+  engine?: Engine;
+};
 export type WebpageParams = Schemas["WebpageRequest"];
 export type RankParams = Schemas["RankRequest"];
 export type MapParams = Schemas["MapRequest"];
@@ -60,6 +65,16 @@ export type ImageResult = Schemas["ImageResult"];
 export type VideoResult = Schemas["VideoResult"];
 export type NewsResult = Schemas["NewsResult"];
 export type PlaceResult = Schemas["PlaceResult"];
+/**
+ * Opening hours per weekday (`monday` … `sunday`) as local 24-hour `HH:MM` intervals: a closed
+ * day is `[]`, a day open 24 hours `[{ open: "00:00", close: "24:00" }]`. Days Google doesn't
+ * list are absent.
+ */
+export type WeeklyHours = Schemas["WeeklyHours"];
+/** One opening interval; `next_day` when it closes after midnight. */
+export type HoursInterval = Schemas["HoursInterval"];
+/** A photo of a place (`place`; up to 10). */
+export type PlacePhoto = Schemas["PlacePhoto"];
 export type ReviewResult = Schemas["ReviewResult"];
 export type ShoppingResult = Schemas["ShoppingResult"];
 export type ScholarResult = Schemas["ScholarResult"];
@@ -83,7 +98,7 @@ export type SearchResponse = Schemas["SearchResponse"];
 export type ImagesResponse = Schemas["ImagesResponse"];
 export type VideosResponse = Schemas["VideosResponse"];
 export type NewsResponse = Schemas["NewsResponse"];
-/** Returned by both `maps` and `places`. */
+/** Returned by `maps`, `places` and `place`. */
 export type PlacesResponse = Schemas["PlacesResponse"];
 export type MapsResponse = PlacesResponse;
 export type ReviewsResponse = Schemas["ReviewsResponse"];
@@ -130,6 +145,7 @@ type BatchRequestMap = {
   news: SearchParams;
   maps: SearchParams;
   places: SearchParams;
+  place: PlaceParams;
   reviews: ReviewsParams;
   shopping: SearchParams;
   scholar: SearchParams;

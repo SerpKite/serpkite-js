@@ -157,7 +157,17 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,zoomz") to search around a point */
+        /**
+         * Google Maps search (places with coordinates). Accepts `ll` ("@lat,lng,zoomz") to search around a point
+         * @description Google Maps search results: name, full address, coordinates, categories, rating, website,
+         *     phone, opening hours and the place's identifiers (`place_id`, `cid`, `fid`) for
+         *     `/v1/place` and `/v1/reviews`. Categories, addresses and hours are in `language`.
+         *
+         *     **Where:** `ll` ("@lat,lng,zoomz") searches the map at that point and zoom; `location`
+         *     (or `uule`) searches the named place. Without either, Google picks the area from the
+         *     query (an exact name or address) or from where the request comes from, so local queries
+         *     such as "coffee" need `location` or `ll`.
+         */
         post: operations["maps"];
         delete?: never;
         options?: never;
@@ -174,8 +184,34 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Google local results (places) */
+        /**
+         * Google local results (places)
+         * @description Same results as `/v1/maps` (Google Maps search), with the same fields and location rules.
+         */
         post: operations["places"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/place": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Details of one place (by `place_id`, `cid` or `fid`); 1 credit
+         * @description The full Google Maps listing of one place: address, country, coordinates, time zone,
+         *     categories, opening hours (as text and as structured `weekly_hours`), website, phone,
+         *     rating, description and photos, in `language`. `results` holds the place, or is empty
+         *     (not charged) when no place has that identifier.
+         */
+        post: operations["place"];
         delete?: never;
         options?: never;
         head?: never;
@@ -641,7 +677,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, scholar, webpage
+         * Remote MCP server (streamable HTTP, JSON-RPC 2.0). Tools search, news, maps, place, scholar, webpage
          * @description Authenticates with an API key (`Authorization: Bearer skt_live_…`) or an
          *     OAuth 2.1 access token (`skt_oat_…`) issued by app-api.serpkite.com for
          *     this resource (MCP authorization spec). Without a valid credential the
@@ -802,7 +838,7 @@ export interface components {
             location?: string;
             /** @description Pre-encoded Google location (overrides ll and location; percent-encoded values are decoded) */
             uule?: string;
-            /** @description Map point "@lat,lng,14z" (maps and places only; zoom optional): the search runs as a searcher at that point. Overrides location */
+            /** @description Map point "@lat,lng,14z" (maps and places only; zoom optional, default 14z): the map is searched around that point at that zoom, wherever the request comes from. Overrides location */
             ll?: string;
             /**
              * @description 10, or up to 100 for the depth bundle on search and news (7 credits for 100; values between round up to whole pages). Other verticals return one page of 10
@@ -890,14 +926,15 @@ export interface components {
             country?: string;
             language?: string;
             /**
+             * @description Only `most_relevant` is served: Google Maps shows other review orders only to signed-in visitors, so `newest`, `highest_rating` and `lowest_rating` return 400 (not charged).
              * @default most_relevant
              * @enum {string}
              */
             sort?: "most_relevant" | "newest" | "highest_rating" | "lowest_rating";
-            /** @description `next_page_token` from the previous page, unchanged. Opaque and bound to the place and `sort` it was issued for (anything else is a 400). Paging reaches the first 100 reviews of a place per sort order. */
+            /** @description `next_page_token` from the previous page, unchanged. Opaque and bound to the place and `sort` it was issued for (anything else is a 400). Paging reaches the first 10 reviews of a place, all Google Maps shows a logged-out visitor. */
             page_token?: string;
             /**
-             * @description Reviews per page (a page can be shorter when Google stops loading early; `next_page_token` then resumes after it)
+             * @description Reviews per page; a page holds at most 10 (the first 10 reviews of a place). A page can be shorter when Google stops loading early; `next_page_token` then resumes after it
              * @default 10
              */
             num?: number;
@@ -905,6 +942,34 @@ export interface components {
             format?: "json" | "markdown" | "compact";
             fields?: string;
             max_age?: number;
+        };
+        /** @description One of place_id, cid or fid is required (place_id wins, then fid, then cid) */
+        PlaceRequest: {
+            /** @description Google place id ("ChIJ…"), e.g. `place_id` of a /v1/maps result */
+            place_id?: string;
+            /** @description Decimal customer id (`cid` of a result) */
+            cid?: string;
+            /** @description Feature id "0x…:0x…" (`fid` of a result) */
+            fid?: string;
+            /**
+             * @description Country code (ISO 3166-1 alpha-2); Google's regional view of the listing
+             * @default us
+             */
+            country?: string;
+            /**
+             * @description Language of the address, categories, hours and description (e.g. en, ru, de)
+             * @default en
+             */
+            language?: string;
+            /**
+             * @default json
+             * @enum {string}
+             */
+            format?: "json" | "markdown" | "compact";
+            fields?: string;
+            /** @description Accept a cached result up to this many seconds old (50% of credits on a hit) */
+            max_age?: number;
+            engine?: components["schemas"]["EngineParam"];
         };
         WebpageRequest: {
             /**
@@ -1462,13 +1527,62 @@ export interface components {
             types?: string[];
             website?: string;
             phone_number?: string;
+            /** @example +44 20 7232 3010 */
+            international_phone_number?: string;
+            /** @description Hours as Google displays them, keyed by English weekday (Monday … Sunday), in `language`, e.g. {"Monday": "7:30 am–6 pm", "Sunday": "Closed"} */
             opening_hours?: {
                 [key: string]: string;
             };
+            weekly_hours?: components["schemas"]["WeeklyHours"];
+            /** @description ISO 3166-1 alpha-2 country code of the place, upper case (RU, GB) */
+            country?: string;
+            /** @description IANA time zone of the place (Europe/Moscow) */
+            timezone?: string;
+            /** @description Google's short description of the place, or the owner's, when Google shows one */
+            description?: string;
+            /** @description Photos of the place (/v1/place; up to 10). The URLs are public and can be fetched server-side without cookies */
+            photos?: components["schemas"]["PlacePhoto"][];
+            /** @description The place on Google Maps */
+            google_maps_url?: string;
             thumbnail_url?: string;
             place_id?: string;
             cid?: string;
             fid?: string;
+        };
+        /**
+         * @description Opening hours per weekday, from Google's listing, as local times (`timezone`) in 24-hour HH:MM.
+         *     A day that is closed is an empty list; a day open 24 hours is `[{"open": "00:00", "close": "24:00"}]`;
+         *     a day with a break has several intervals. `close` is "24:00" at midnight, and an interval that
+         *     ends after midnight has `next_day: true` (e.g. 17:30–03:00). Days Google doesn't list are absent.
+         */
+        WeeklyHours: {
+            monday?: components["schemas"]["HoursIntervals"];
+            tuesday?: components["schemas"]["HoursIntervals"];
+            wednesday?: components["schemas"]["HoursIntervals"];
+            thursday?: components["schemas"]["HoursIntervals"];
+            friday?: components["schemas"]["HoursIntervals"];
+            saturday?: components["schemas"]["HoursIntervals"];
+            sunday?: components["schemas"]["HoursIntervals"];
+        };
+        HoursIntervals: components["schemas"]["HoursInterval"][];
+        HoursInterval: {
+            /** @example 08:00 */
+            open: string;
+            /** @example 22:00 */
+            close: string;
+            /** @description The interval closes after midnight, on the next day */
+            next_day?: boolean;
+        };
+        PlacePhoto: {
+            /** @description Image URL (at most 1600 px on the long side) */
+            url: string;
+            width?: number;
+            height?: number;
+            /**
+             * @description Who uploaded it, when Google says (Google shows no contributor names to logged-out visitors)
+             * @enum {string}
+             */
+            source?: "business" | "visitor";
         };
         PlacesResponse: {
             request: components["schemas"]["RequestEcho"];
@@ -1686,7 +1800,7 @@ export interface components {
         };
         BatchCreateRequest: {
             /** @enum {string} */
-            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "webpage";
+            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "place" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "webpage";
             /** @description Request bodies for `endpoint` (same fields as the realtime endpoint) */
             requests: {
                 [key: string]: unknown;
@@ -2497,6 +2611,28 @@ export interface operations {
             cookie?: never;
         };
         requestBody: components["requestBodies"]["Search"];
+        responses: {
+            200: components["responses"]["PlacesOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    place: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PlaceRequest"];
+            };
+        };
         responses: {
             200: components["responses"]["PlacesOK"];
             400: components["responses"]["Error"];

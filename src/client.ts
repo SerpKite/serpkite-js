@@ -23,6 +23,7 @@ import type {
   MonitorUpdateParams,
   NewsResponse,
   PatentsResponse,
+  PlaceParams,
   PlacesResponse,
   RankParams,
   RankResponse,
@@ -39,7 +40,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.4.0";
+export const VERSION = "0.5.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -180,6 +181,12 @@ export class SerpKite {
   readonly maps = this.#vertical<SearchParams, PlacesResponse>("/v1/maps");
   /** Google local results. */
   readonly places = this.#vertical<SearchParams, PlacesResponse>("/v1/places");
+  /**
+   * Details of one place by `place_id`, `cid` or `fid`: address, country, time zone, hours
+   * (`opening_hours` text and structured `weekly_hours`), phones, description and photos.
+   * `results` holds the place, or is empty (not charged) when no place has that id. 1 credit.
+   */
+  readonly place = this.#vertical<PlaceParams, PlacesResponse>("/v1/place");
   /** Reviews of a place by `place_id`, `cid` or `fid`. Page with `page_token` = `next_page_token`. */
   readonly reviews = this.#vertical<ReviewsParams, ReviewsResponse>("/v1/reviews");
   /** Google Shopping. */
