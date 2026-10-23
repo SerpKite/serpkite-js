@@ -192,7 +192,7 @@ await sk.news({ q: "espresso", engine: ["google", "brave"] });
 ```
 
 - `engine` is `"google"` (default), `"auto"`, `"consensus"`, one `Provider` (`"brave"`, `"bing"`,
-  `"yahoo"`, `"duckduckgo"`, `"mojeek"`, `"wikipedia"`) or a `Provider[]` list. `"auto"` and `"consensus"` can't
+  `"yahoo"`, `"duckduckgo"`, `"mojeek"`, `"wikipedia"`, `"yandex"`) or a `Provider[]` list. `"auto"` and `"consensus"` can't
   be combined with other names; unknown names, or a provider that doesn't serve the endpoint, return
   `400 invalid_request`.
 - `engine: "consensus"` (`search` only) asks several independent indexes in parallel, merges the
