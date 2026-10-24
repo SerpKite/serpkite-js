@@ -1,6 +1,9 @@
 import { errorFromResponse, SerpKiteError } from "./errors";
 import type {
   Account,
+  AnswerParams,
+  AnswerResponse,
+  AnswerStreamEvent,
   AutocompleteResponse,
   Batch,
   BatchCreateEntry,
@@ -27,6 +30,8 @@ import type {
   PlacesResponse,
   RankParams,
   RankResponse,
+  ResearchParams,
+  ResearchTask,
   ReviewsParams,
   ReviewsResponse,
   ScholarResponse,
@@ -40,7 +45,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.6.0";
+export const VERSION = "0.7.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -96,8 +101,9 @@ export interface BatchCreateOptions extends RequestOptions {
 
 export interface WaitOptions {
   /**
-   * Give up after this many milliseconds. Default 600000 (10 minutes) for batches and
-   * 2100000 (35 minutes) for `waitForCrawl`: a crawl runs for up to 30 minutes.
+   * Give up after this many milliseconds. Default 600000 (10 minutes) for batches,
+   * 2100000 (35 minutes) for `waitForCrawl` (a crawl runs for up to 30 minutes) and
+   * 900000 (15 minutes) for `waitResearch`.
    */
   timeoutMs?: number;
   /** First delay between polls. Default 1000. Grows 1.5× per poll. */
@@ -117,7 +123,7 @@ export interface VerticalMethod<P, R> {
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
-/** Task states after which `waitForCrawl` returns. */
+/** Task states after which `waitForCrawl` and `waitResearch` return. */
 const TASK_DONE = new Set(["completed", "failed", "canceled"]);
 
 interface Call {
@@ -213,11 +219,16 @@ export class SerpKite {
    * Read up to 20 URLs (HTML or PDF) as Markdown, text or HTML in one call, with optional
    * query-ranked `highlights` (BM25), `include_links` and `include_images`. 1 credit per URL
    * that comes back (0.5 from cache); URLs that fail are listed in `failed` and cost nothing.
+   * `summary: true` adds an AI summary of each page and `output_schema` (a JSON Schema, guided
+   * by an optional `prompt`) returns each page's data as JSON in `output`, each at an extra
+   * per-page price (https://serpkite.com/pricing); a page whose model step failed has
+   * `summary_error` / `output_error` instead and isn't charged for it.
    */
   extract(params: ExtractParams, options?: RequestOptions): Promise<ExtractResponse> {
-    // Billed per page even when the response is lost: retried only on 429,
-    // and the HTTP timeout covers the server's deadline (timeout, default 50 s) + 15 s.
-    const wait = ((params.timeout ?? 50) + 15) * 1000;
+    // Billed per page even when the response is lost: retried only on 429, and the HTTP
+    // timeout covers the server's deadline (timeout: default 50 s, 75 s with AI) + 15 s.
+    const ai = params.summary === true || params.output_schema !== undefined;
+    const wait = ((params.timeout ?? (ai ? 75 : 50)) + 15) * 1000;
     return this.request({
       method: "POST",
       path: "/v1/extract",
@@ -243,6 +254,53 @@ export class SerpKite {
   /** Balance, limits and this month's usage for the key's account. */
   account(options?: RequestOptions): Promise<Account> {
     return this.request({ method: "GET", path: "/v1/account", options });
+  }
+
+  // ── AI answers ────────────────────────────────────────────────────────
+
+  /**
+   * A cited answer grounded on live Google results: Markdown with `[n]` markers in `answer`,
+   * the cited sources in `citations`. `depth: "fast"` answers from the result page;
+   * `"standard"` (default) also reads the top `num_sources` pages and costs more
+   * (https://serpkite.com/pricing; `meta.credits` splits search and model). With
+   * `output_schema` the answer is a JSON value in `output`.
+   * When the model fails the call throws `ai_unavailable` (503) and the model part is refunded;
+   * a search with nothing to answer from returns `answer: null` and a `meta.warnings` entry.
+   */
+  answer(params: AnswerParams, options?: RequestOptions): Promise<AnswerResponse> {
+    // Billed even when the response is lost (and a 503 ai_unavailable still charges the
+    // search part): retried only on 429, and the HTTP timeout covers a search plus the model.
+    return this.request({
+      method: "POST",
+      path: "/v1/answer",
+      body: params,
+      options: { ...options, timeoutMs: this.#answerTimeout(options) },
+      retry: "rate_limit",
+    });
+  }
+
+  /**
+   * Streams an answer as Server-Sent Events: `results` first, then `delta` text pieces,
+   * then `done` (final answer, citations, meta). A server `error` event is thrown as a
+   * `SerpKiteError` (`ai_unavailable`). Breaking out of the loop closes the connection
+   * (the model part is then not charged). Can't be combined with `output_schema`.
+   *
+   * ```ts
+   * for await (const ev of sk.answerStream({ q: "what is retrieval-augmented generation" })) {
+   *   if (ev.event === "delta") process.stdout.write(ev.data.text);
+   * }
+   * ```
+   */
+  answerStream(params: AnswerParams, options?: RequestOptions): AsyncIterable<AnswerStreamEvent> {
+    return this.#stream(
+      { ...params, stream: true },
+      { ...options, timeoutMs: this.#answerTimeout(options) },
+    );
+  }
+
+  /** The search (pages read included) runs before the first byte: wait at least 100 s. */
+  #answerTimeout(options?: RequestOptions): number {
+    return options?.timeoutMs ?? (this.timeoutMs > 0 ? Math.max(this.timeoutMs, 100_000) : 0);
   }
 
   // ── Async tasks: crawl ────────────────────────────────────────────────
@@ -293,6 +351,66 @@ export class SerpKite {
       ...options,
       timeoutMs: options.timeoutMs ?? 2_100_000,
     });
+  }
+
+  // ── Async tasks: research ─────────────────────────────────────────────
+
+  /**
+   * Starts an async research task: the model plans searches, reads the sources and writes a
+   * cited Markdown report (`result.report`). `effort` (`lite`, `standard` (default), `deep`)
+   * sets how much is searched and read; its flat price (https://serpkite.com/pricing) is
+   * reserved up front and charged only when the report is written (a canceled task is charged
+   * for the searches already run). With
+   * `output_schema` the report is also returned as JSON in `result.output`. Poll with
+   * `getResearch` / `waitResearch` or receive the signed `research.completed` webhook.
+   * Only retried on 429, so a lost response never starts (and reserves) a second task.
+   */
+  research(params: ResearchParams, options?: RequestOptions): Promise<TaskCreated> {
+    return this.request({
+      method: "POST",
+      path: "/v1/research",
+      body: params,
+      options,
+      retry: "rate_limit",
+    });
+  }
+
+  /** Polls a research task (`progress` while it runs; results are kept for 24 hours). */
+  getResearch(id: string, options?: RequestOptions): Promise<ResearchTask> {
+    return this.request({
+      method: "GET",
+      path: `/v1/research/${encodeURIComponent(id)}`,
+      options,
+    });
+  }
+
+  /**
+   * Cancels a research task: refunded if still queued, else stops at its next round and is
+   * charged for the searches run.
+   */
+  cancelResearch(id: string, options?: RequestOptions): Promise<TaskCancelResponse> {
+    return this.request({
+      method: "DELETE",
+      path: `/v1/research/${encodeURIComponent(id)}`,
+      options,
+    });
+  }
+
+  /**
+   * Polls until the research task is `completed`, `failed` or `canceled` and returns it (a
+   * failed task is returned, not thrown; check `status` and `error`). The report is in
+   * `result.report`. Accepts an id or the task returned by `research`. Default timeout
+   * 15 minutes.
+   */
+  async waitResearch(
+    idOrTask: string | { id: string },
+    options: WaitOptions = {},
+  ): Promise<ResearchTask> {
+    return this.#waitTask(
+      taskId(idOrTask),
+      (id) => this.getResearch(id, { signal: options.signal }),
+      { ...options, timeoutMs: options.timeoutMs ?? 900_000 },
+    );
   }
 
   // ── Monitors ──────────────────────────────────────────────────────────
@@ -512,6 +630,156 @@ export class SerpKite {
     }
   }
 
+  /** Opens `POST /v1/answer` as an event stream (retrying the connect like `request`) and parses it. */
+  async *#stream(body: unknown, options: RequestOptions = {}): AsyncGenerator<AnswerStreamEvent> {
+    const maxRetries = Math.max(0, options.maxRetries ?? this.maxRetries);
+    const timeoutMs = options.timeoutMs ?? this.timeoutMs;
+    const headers: Record<string, string> = {
+      Accept: "text/event-stream, application/json;q=0.9",
+      Authorization: `Bearer ${this.#apiKey}`,
+      ...this.#headers,
+      ...options.headers,
+      "Content-Type": "application/json",
+    };
+    if (!isBrowser()) headers["User-Agent"] = `serpkite-typescript/${VERSION}`;
+    let res: Response | undefined;
+    let cleanup = () => {};
+    for (let attempt = 0; !res; attempt++) {
+      const canRetry = attempt < maxRetries;
+      // The timeout covers connecting (until the headers arrive), not the whole stream.
+      const t = withTimeout(options.signal, timeoutMs);
+      let r: Response;
+      try {
+        r = await this.#fetch(`${this.baseUrl}/v1/answer`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(body),
+          signal: t.signal,
+        });
+      } catch (err) {
+        t.cleanup();
+        if (options.signal?.aborted) throw err;
+        if (canRetry) {
+          await sleep(this.#backoff(attempt), options.signal);
+          continue;
+        }
+        const code = t.timedOut() ? "timeout" : "connection_error";
+        const msg = t.timedOut()
+          ? `request timed out after ${timeoutMs} ms`
+          : `request failed: ${err instanceof Error ? err.message : String(err)}`;
+        throw new SerpKiteError(0, code, msg, undefined, undefined, { cause: err });
+      }
+      if (!r.ok) {
+        const text = await r.text().catch(() => "");
+        t.cleanup();
+        // Nothing is charged before the stream starts, so 5xx are safe to retry.
+        if (canRetry && (r.status === 429 || r.status >= 500)) {
+          await sleep(this.#retryDelay(attempt, r.headers), options.signal);
+          continue;
+        }
+        throw errorFromResponse(r.status, r.headers, text);
+      }
+      // Stop the connect timer but keep forwarding the caller's abort signal.
+      t.stopTimer();
+      cleanup = t.cleanup;
+      res = r;
+    }
+    options.onResponse?.(responseInfo(res));
+    const requestId = res.headers.get("x-request-id") ?? undefined;
+    if (!res.body) {
+      cleanup();
+      throw new SerpKiteError(
+        res.status,
+        "invalid_response",
+        "response has no body",
+        requestId,
+        res.headers,
+      );
+    }
+    // A plain JSON answer (e.g. from a proxy that dropped the stream) becomes results + done.
+    if ((res.headers.get("content-type") ?? "").includes("json")) {
+      let answer: AnswerResponse;
+      try {
+        answer = JSON.parse(await res.text()) as AnswerResponse;
+      } catch (err) {
+        throw new SerpKiteError(
+          res.status,
+          "invalid_response",
+          "response is not valid JSON",
+          requestId,
+          res.headers,
+          { cause: err },
+        );
+      } finally {
+        cleanup();
+      }
+      yield { event: "results", data: { request: answer.request, results: answer.results } };
+      yield {
+        event: "done",
+        data: { answer: answer.answer ?? "", citations: answer.citations, meta: answer.meta },
+      };
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    let done = false;
+    try {
+      while (!done) {
+        let chunk: Awaited<ReturnType<typeof reader.read>>;
+        try {
+          chunk = await reader.read();
+        } catch (err) {
+          if (options.signal?.aborted) throw err;
+          throw new SerpKiteError(
+            0,
+            "connection_error",
+            `stream read failed: ${err instanceof Error ? err.message : String(err)}`,
+            requestId,
+            res.headers,
+            { cause: err },
+          );
+        }
+        if (chunk.done) {
+          buf += decoder.decode();
+          done = true;
+        } else {
+          buf += decoder.decode(chunk.value, { stream: true });
+        }
+        // A CR at the end of a chunk may be the first half of a CRLF split across chunks:
+        // keep it until the next chunk shows what follows.
+        const held = !done && buf.endsWith("\r") ? "\r" : "";
+        if (held) buf = buf.slice(0, -1);
+        buf = buf.replace(/\r\n?/g, "\n");
+        let sep = buf.indexOf("\n\n");
+        while (sep >= 0 || (done && buf.trim() !== "")) {
+          const raw = sep >= 0 ? buf.slice(0, sep) : buf;
+          buf = sep >= 0 ? buf.slice(sep + 2) : "";
+          const ev = parseSSE(raw);
+          if (ev) {
+            if (ev.event === "error") throw sseError(ev.data, res.headers, requestId);
+            if (ev.event === "results" || ev.event === "delta" || ev.event === "done") {
+              yield { event: ev.event, data: ev.data } as AnswerStreamEvent;
+              if (ev.event === "done") return;
+            }
+          }
+          sep = buf.indexOf("\n\n");
+        }
+        buf += held;
+      }
+      throw new SerpKiteError(
+        res.status,
+        "invalid_response",
+        "the stream ended before the done event",
+        requestId,
+        res.headers,
+      );
+    } finally {
+      cleanup();
+      reader.cancel().catch(() => {});
+    }
+  }
+
   /** Low-level request: JSON body in, parsed JSON (or text for non-JSON responses) out. */
   async request<T>(call: Call): Promise<T> {
     const { method, path, body, options = {} } = call;
@@ -634,6 +902,40 @@ function taskId(idOrTask: string | { id: string }): string {
   return id;
 }
 
+/** Parses one SSE block (`event:` / `data:` lines) into its event name and JSON data. */
+function parseSSE(block: string): { event: string; data: unknown } | undefined {
+  let event = "message";
+  const data: string[] = [];
+  for (const line of block.split("\n")) {
+    if (line === "" || line.startsWith(":")) continue;
+    const i = line.indexOf(":");
+    const field = i < 0 ? line : line.slice(0, i);
+    let value = i < 0 ? "" : line.slice(i + 1);
+    if (value.startsWith(" ")) value = value.slice(1);
+    if (field === "event") event = value;
+    else if (field === "data") data.push(value);
+  }
+  if (data.length === 0) return undefined;
+  const text = data.join("\n");
+  try {
+    return { event, data: JSON.parse(text) };
+  } catch {
+    return { event, data: text };
+  }
+}
+
+/** The `error` event of an answer stream as a SerpKiteError (503, like the JSON error). */
+function sseError(data: unknown, headers: Headers, requestId: string | undefined): SerpKiteError {
+  const e = (data as { error?: { code?: string; message?: string; request_id?: string } })?.error;
+  return new SerpKiteError(
+    503,
+    e?.code ?? "unavailable",
+    e?.message ?? "the answer stream failed",
+    e?.request_id ?? requestId,
+    headers,
+  );
+}
+
 /** Parses Retry-After (seconds or an HTTP date) into milliseconds. */
 export function parseRetryAfter(v: string | null): number | undefined {
   if (!v) return undefined;
@@ -681,6 +983,9 @@ function withTimeout(outer: AbortSignal | undefined, ms: number) {
   return {
     signal: ctrl.signal,
     timedOut: () => timedOut,
+    stopTimer: () => {
+      if (timer !== undefined) clearTimeout(timer);
+    },
     cleanup: () => {
       if (timer !== undefined) clearTimeout(timer);
       outer?.removeEventListener("abort", onAbort);

@@ -342,10 +342,19 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Up to 20 URLs (HTML or PDF) as Markdown, text or HTML, with query-ranked highlights, links and images (1 credit per URL read)
+         * Up to 20 URLs (HTML or PDF) as Markdown, text or HTML, with query-ranked highlights, links, images, an AI summary or JSON extracted with a schema (1 credit per URL read)
          * @description Every URL is billed only when it comes back: 1 credit, 0.5 from cache. URLs that
          *     fail are listed in `failed` and cost nothing. The response is `200` even when every
          *     URL failed. Highlights are ranked with BM25 (lexical, no model).
+         *
+         *     **AI:** `summary: true` adds a 3–6 sentence summary of each page (+4 credits per
+         *     page); `output_schema` (a JSON Schema, at most 16 KB, optionally guided by
+         *     `prompt`) returns each page's data as JSON in `output` (+4 credits per page).
+         *     Claude Haiku writes both; a schema whose fields are all booleans or enums is
+         *     answered by a decision model instead (always valid against the schema). A
+         *     summary or extraction that fails is reported in `summary_error` /
+         *     `output_error` and not charged. With either, `timeout` defaults to 75 seconds
+         *     and the last 25 are kept for the model.
          */
         post: operations["extract"];
         delete?: never;
@@ -433,6 +442,106 @@ export interface paths {
          * @description `404` when there is no such crawl, `409` when it already finished.
          */
         delete: operations["cancelCrawl"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A cited answer grounded on live Google results, written by Claude (fast = 1 + 2 credits; standard = 1 + 1 per page read + 4)
+         * @description Runs the query on Google, then Claude (Haiku by default) writes a concise answer
+         *     that cites the numbered `results` with `[n]` markers. `depth=fast` answers from
+         *     the result page (snippets, answer box, knowledge panel); `depth=standard`
+         *     (default) also reads the top `num_sources` pages and answers from their
+         *     query-ranked passages. Sources are untrusted: instructions inside pages are
+         *     ignored.
+         *
+         *     **Billing:** the search part is priced like `/v1/search` with `include_content`
+         *     (1 credit + 1 per page read, cache rules as usual); the model adds 2 credits at
+         *     `fast` and 4 when it read pages (`standard`; 2 if no page could be read).
+         *     `meta.credits` splits the two. When the model fails the answer part is refunded
+         *     (`503 ai_unavailable`); a search that returned nothing to answer from is answered
+         *     with `answer: null`, a warning, and no model charge.
+         *
+         *     **Structured output:** with `output_schema` (a JSON Schema, at most 16 KB) the
+         *     answer is a JSON value in `output` (and `answer` is null). Can't be combined
+         *     with `stream`.
+         *
+         *     **Streaming:** `stream: true` returns `text/event-stream` with these events, in
+         *     order: `results` (`{request, results}`), `delta` (`{text}`, repeated), then
+         *     `done` (`{answer, citations, meta}`) or `error` (`{error}`). Billing headers on a
+         *     stream carry the search part only; the final `meta` has the total.
+         */
+        post: operations["answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start an async deep-research task — planned searches, page reading, a cited Markdown report written by Claude (lite 30, standard 75, deep 200 credits)
+         * @description Claude plans Google queries for `input`, the pages they find are read and
+         *     ranked, a decision model checks whether the notes already cover the task (and
+         *     drops off-topic sources), Claude reviews gaps and plans follow-up rounds, then
+         *     writes a Markdown report citing numbered sources (and, with `output_schema`, a
+         *     JSON value in `output`).
+         *
+         *     | effort | credits | first-round queries | rounds | pages per query |
+         *     |---|---:|---:|---:|---:|
+         *     | lite | 30 | 3 | 1 | 2 |
+         *     | standard | 75 | 5 | 2 | 3 |
+         *     | deep | 200 | 8 | 3 | 4 |
+         *
+         *     The flat price is reserved at enqueue and charged only when the report is
+         *     written; failed research is refunded. A canceled task is charged 1 credit per
+         *     search already run. Returns `202`; poll `GET /v1/research/{id}` or wait for the
+         *     signed `research.completed` webhook. At most 20 crawl and research tasks per
+         *     account may be queued or running at once (`429`).
+         */
+        post: operations["createResearch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/research/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** Poll a research task (kept for 24 hours) */
+        get: operations["getResearch"];
+        put?: never;
+        post?: never;
+        /**
+         * Cancel a research task. A queued task is refunded at once; a running one stops at its next round and is charged for the searches run
+         * @description `404` when there is no such task, `409` when it already finished.
+         */
+        delete: operations["cancelResearch"];
         options?: never;
         head?: never;
         patch?: never;
@@ -605,7 +714,8 @@ export interface paths {
          * @description Credits for the whole batch are reserved together: if the balance, spend cap, key limit or
          *     free daily cap can't cover every valid request, none is queued and each gets the error
          *     (invalid requests get their own 400 entry either way). Each job is settled and refunded on
-         *     its own once it runs.
+         *     its own once it runs. Half price applies to the search part; an AI surcharge
+         *     (`include_answer`) is charged in full.
          *
          *     **Retries.** Send an `Idempotency-Key` to make the call safe to retry: for 24 hours a
          *     repeat with the same key and the same body returns the first response (with
@@ -757,6 +867,28 @@ export interface webhooks {
          *     "<timestamp>.<raw body>")>`. Retried with backoff until a 2xx.
          */
         post: operations["crawlCompletedWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "research.completed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * A research task finished (completed, failed or canceled)
+         * @description Sent to the task's `webhook_url` (or the account webhook), signed like
+         *     `crawl.completed` with `X-SerpKite-Event: research.completed`. `result` is the
+         *     ResearchResult.
+         */
+        post: operations["researchCompletedWebhook"];
         delete?: never;
         options?: never;
         head?: never;
@@ -919,6 +1051,11 @@ export interface components {
              * @default false
              */
             highlights?: boolean;
+            /**
+             * @description Add a cited AI `answer` written by Claude over this response's results (search and news; +2 credits, +4 when it read pages via `include_content`; refunded with a `meta.warnings` entry when the model fails)
+             * @default false
+             */
+            include_answer?: boolean;
         };
         /** @description Domains as an array or a comma-separated string, at most 20: a host (`example.com`, subdomains match), a host with a path prefix (`github.com/org`) or a TLD (`.gov`). */
         DomainList: string | string[];
@@ -1041,10 +1178,21 @@ export interface components {
             /** @description Fetch through an exit in this country (ISO 3166-1 alpha-2) */
             country?: string;
             /**
-             * @description Seconds to wait for the pages; a page still loading is listed in `failed` (`upstream_timeout`, not charged)
+             * @description Seconds to wait for the pages; a page still loading is listed in `failed` (`upstream_timeout`, not charged). Default 75 with summary or output_schema
              * @default 50
              */
             timeout?: number;
+            /**
+             * @description Add a 3-6 sentence AI summary of each page (+4 credits per page; focused on `query` when set)
+             * @default false
+             */
+            summary?: boolean;
+            /** @description A JSON Schema (at most 16 KB): each page's data is returned as JSON matching it in `output` (+4 credits per page) */
+            output_schema?: {
+                [key: string]: unknown;
+            };
+            /** @description Guides output_schema extraction (what to pick, how to normalise); needs output_schema */
+            prompt?: string;
         };
         ExtractResult: {
             /** @description Final URL after redirects */
@@ -1067,6 +1215,12 @@ export interface components {
             images?: string[];
             /** @description highlights > 0 only */
             highlights?: components["schemas"]["Highlight"][];
+            /** @description summary=true only (null when it failed) */
+            summary?: string | null;
+            summary_error?: string;
+            /** @description output_schema only: the JSON value matching the schema (null when it failed) */
+            output?: unknown;
+            output_error?: string;
         };
         ExtractFailure: {
             url: string;
@@ -1099,7 +1253,188 @@ export interface components {
                 latency_ms?: number;
                 succeeded: number;
                 failed: number;
+                llm?: components["schemas"]["LLMUsage"];
             };
+        };
+        AnswerRequest: {
+            q: string;
+            /**
+             * @description `fast` answers from the result page (1 + 2 credits); `standard` also reads the top `num_sources` pages (1 + 1 per page + 4 credits)
+             * @default standard
+             * @enum {string}
+             */
+            depth?: "fast" | "standard";
+            /**
+             * @description Pages read (depth=standard only)
+             * @default 3
+             */
+            num_sources?: number;
+            /**
+             * @description Send Server-Sent Events (`results`, `delta`…, `done` | `error`) instead of one JSON body
+             * @default false
+             */
+            stream?: boolean;
+            /** @description A JSON Schema (at most 16 KB). The answer becomes a JSON value in `output`. Not with stream */
+            output_schema?: {
+                [key: string]: unknown;
+            };
+            /** @default us */
+            country?: string;
+            /** @default en */
+            language?: string;
+            location?: string;
+            uule?: string;
+            /** @enum {string} */
+            time?: "hour" | "day" | "week" | "month" | "year";
+            tbs?: string;
+            /**
+             * @default desktop
+             * @enum {string}
+             */
+            device?: "desktop" | "mobile";
+            /**
+             * @default off
+             * @enum {string}
+             */
+            safe?: "active" | "off";
+            /** @default true */
+            autocorrect?: boolean;
+            /** @description Accept a cached search up to this many seconds old */
+            max_age?: number;
+            engine?: components["schemas"]["EngineParam"];
+            include_domains?: components["schemas"]["DomainList"];
+            exclude_domains?: components["schemas"]["DomainList"];
+            boost_domains?: components["schemas"]["DomainList"];
+            /** Format: date */
+            start_date?: string;
+            /** Format: date */
+            end_date?: string;
+        };
+        /** @description A result the answer may cite, numbered as in the prompt (`[index]`) */
+        AnswerSource: {
+            index: number;
+            title: string;
+            link: string;
+            domain?: string;
+            /** @description Publish date (ISO 8601 when known, else as shown) */
+            date?: string;
+        };
+        AnswerMeta: components["schemas"]["Meta"] & {
+            /** @description `credits_used` split into the search and the model part */
+            credits?: {
+                search?: number;
+                answer?: number;
+            };
+        };
+        AnswerResponse: {
+            request: components["schemas"]["RequestEcho"];
+            /** @description Markdown with `[n]` citation markers. Null with output_schema, or when there was nothing to answer from */
+            answer: string | null;
+            /** @description output_schema only: the JSON value matching the schema */
+            output?: unknown;
+            /** @description The sources the answer cites, in first-cited order */
+            citations: components["schemas"]["Citation"][];
+            results: components["schemas"]["AnswerSource"][];
+            meta: components["schemas"]["AnswerMeta"];
+        };
+        /** @description `event: results`, sent first */
+        AnswerStreamResults: {
+            request: components["schemas"]["RequestEcho"];
+            results: components["schemas"]["AnswerSource"][];
+        };
+        /** @description `event: delta`: the next piece of answer text */
+        AnswerStreamDelta: {
+            text: string;
+        };
+        /** @description `event: done`, sent last: the final answer (citation markers checked) and meta with the total credits */
+        AnswerStreamDone: {
+            answer: string;
+            citations: components["schemas"]["Citation"][];
+            meta: components["schemas"]["AnswerMeta"];
+        };
+        ResearchRequest: {
+            /** @description The research task in plain words (`q` is accepted as an alias) */
+            input: string;
+            /**
+             * @description lite = 30, standard = 75, deep = 200 credits
+             * @default standard
+             * @enum {string}
+             */
+            effort?: "lite" | "standard" | "deep";
+            /** @description A JSON Schema (at most 16 KB); the report is also returned as a JSON value in `result.output` */
+            output_schema?: {
+                [key: string]: unknown;
+            };
+            country?: string;
+            language?: string;
+            include_domains?: string[];
+            exclude_domains?: string[];
+            /**
+             * Format: uri
+             * @description Receives the signed `research.completed` event. Defaults to the account webhook
+             */
+            webhook_url?: string;
+        };
+        ResearchSource: {
+            index: number;
+            title: string;
+            link: string;
+            domain?: string;
+            published_at?: string;
+            /** @description The query that found it */
+            query?: string;
+        };
+        ResearchResult: {
+            input: string;
+            /** @enum {string} */
+            effort: "lite" | "standard" | "deep";
+            /** @description Markdown report with `[n]` citation markers */
+            report: string;
+            citations: components["schemas"]["Citation"][];
+            sources: components["schemas"]["ResearchSource"][];
+            /** @description Every search the research ran */
+            queries: string[];
+            stats?: {
+                searches?: number;
+                sources?: number;
+                rounds?: number;
+            };
+            llm?: components["schemas"]["LLMUsage"];
+            /** @description output_schema only: the JSON value (null when it could not be produced) */
+            output?: unknown;
+            output_error?: string;
+        };
+        ResearchTask: {
+            /** Format: uuid */
+            id: string;
+            /** @constant */
+            kind: "research";
+            status: components["schemas"]["TaskStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            credits_reserved: number;
+            credits_used: number;
+            /** @enum {string|null} */
+            webhook_status?: "pending" | "delivered" | "failed" | null;
+            progress?: ({
+                round?: number;
+                rounds?: number;
+                queries?: number;
+                sources?: number;
+                /** @enum {string} */
+                step?: "searching" | "reviewing" | "writing";
+            } & {
+                [key: string]: unknown;
+            }) | null;
+            /** @description Set once the report is written (a failed or canceled task may carry only `queries`) */
+            result?: components["schemas"]["ResearchResult"] | {
+                [key: string]: unknown;
+            } | null;
+            error?: components["schemas"]["TaskError"];
         };
         CrawlRequest: {
             /**
@@ -1162,7 +1497,7 @@ export interface components {
             /** Format: uuid */
             id: string;
             /** @enum {string} */
-            kind: "crawl";
+            kind: "crawl" | "research";
             status: components["schemas"]["TaskStatus"];
             /** Format: date-time */
             created_at: string;
@@ -1359,6 +1694,37 @@ export interface components {
             /** @enum {string} */
             parse_quality?: "ok" | "partial" | "empty";
             latency_ms?: number;
+            llm?: components["schemas"]["LLMUsage"];
+            /** @description Non-fatal problems, e.g. an include_answer that failed (and was refunded) */
+            warnings?: string[];
+        };
+        /** @description The model that wrote this response's AI part and the tokens it used */
+        LLMUsage: {
+            /**
+             * @example anthropic
+             * @example openai
+             */
+            provider?: string;
+            /**
+             * @example claude-haiku-5-5
+             * @example gpt-6-luna
+             */
+            model?: string;
+            input_tokens?: number;
+            output_tokens?: number;
+        };
+        Citation: {
+            /** @description The `[n]` marker used in the text (1-based source number) */
+            index: number;
+            title: string;
+            link: string;
+            domain?: string;
+        };
+        /** @description include_answer: a cited answer over this response's results */
+        SearchAnswer: {
+            /** @description Markdown with `[n]` citation markers (n = the numbered sources: answer box, knowledge panel, then results) */
+            text: string;
+            citations: components["schemas"]["Citation"][];
         };
         /** @description The normalised request that produced this response (defaults filled in) */
         RequestEcho: {
@@ -1396,6 +1762,7 @@ export interface components {
             exclude_domains?: string[];
             boost_domains?: string[];
             highlights?: boolean;
+            include_answer?: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -1478,6 +1845,7 @@ export interface components {
             related_searches: components["schemas"]["RelatedSearch"][];
             top_stories?: components["schemas"]["NewsResult"][];
             places?: components["schemas"]["PlaceResult"][];
+            answer?: components["schemas"]["SearchAnswer"];
             meta: components["schemas"]["Meta"];
         };
         ImageResult: {
@@ -1530,6 +1898,7 @@ export interface components {
         NewsResponse: {
             request: components["schemas"]["RequestEcho"];
             results: components["schemas"]["NewsResult"][];
+            answer?: components["schemas"]["SearchAnswer"];
             meta: components["schemas"]["Meta"];
         };
         PlaceResult: {
@@ -1880,14 +2249,14 @@ export interface components {
                 requests: number;
             };
         };
-        /** @description Body of `crawl.completed` */
+        /** @description Body of `crawl.completed` and `research.completed` */
         TaskCompletedEvent: {
-            /** @constant */
-            event: "crawl.completed";
+            /** @enum {string} */
+            event: "crawl.completed" | "research.completed";
             /** Format: uuid */
             id: string;
-            /** @constant */
-            kind: "crawl";
+            /** @enum {string} */
+            kind: "crawl" | "research";
             status: components["schemas"]["TaskStatus"];
             /** Format: date-time */
             created_at: string;
@@ -1896,7 +2265,7 @@ export interface components {
             credits_used: number;
             /** @description Where the task (and its full result) can be fetched for 24 hours */
             poll_url?: string;
-            /** @description The CrawlResult (null when the crawl failed without one, or when it is larger than 4 MB: see result_omitted) */
+            /** @description The CrawlResult or ResearchResult (null when the task failed without one, or when it is larger than 4 MB: see result_omitted) */
             result?: unknown;
             /** @description Set when the result was too large for the webhook; GET poll_url for it */
             result_omitted?: boolean;
@@ -2519,6 +2888,8 @@ export interface operations {
                 end_date?: string;
                 /** @description Needs include_content */
                 highlights?: boolean;
+                /** @description Add a cited AI answer (+2 credits; +4 with include_content) */
+                include_answer?: boolean;
                 api_key?: string;
             };
             header?: never;
@@ -2901,6 +3272,203 @@ export interface operations {
         };
     };
     cancelCrawl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["TaskCanceled"];
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            409: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    answer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "q": "what is retrieval-augmented generation",
+                 *       "depth": "standard",
+                 *       "num_sources": 3
+                 *     }
+                 */
+                "application/json": components["schemas"]["AnswerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK (`text/event-stream` when `stream` is true) */
+            200: {
+                headers: {
+                    "X-Credits-Used": components["headers"]["CreditsUsed"];
+                    "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                    "X-Cost-USD": components["headers"]["CostUSD"];
+                    "X-Cache": components["headers"]["Cache"];
+                    "X-Latency-Ms": components["headers"]["LatencyMs"];
+                    "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    /**
+                     * @example {
+                     *       "request": {
+                     *         "endpoint": "answer",
+                     *         "engine": "google",
+                     *         "q": "what is retrieval-augmented generation",
+                     *         "country": "us",
+                     *         "language": "en",
+                     *         "num": 10,
+                     *         "page": 1,
+                     *         "autocorrect": true,
+                     *         "device": "desktop",
+                     *         "include_content": 3,
+                     *         "depth": "standard",
+                     *         "num_sources": 3
+                     *       },
+                     *       "answer": "Retrieval-augmented generation (RAG) grounds a language model's answer in documents retrieved at query time [1], which reduces hallucinations and keeps answers current [2].",
+                     *       "citations": [
+                     *         {
+                     *           "index": 1,
+                     *           "title": "Retrieval-augmented generation",
+                     *           "link": "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+                     *           "domain": "en.wikipedia.org"
+                     *         },
+                     *         {
+                     *           "index": 2,
+                     *           "title": "What is RAG?",
+                     *           "link": "https://www.ibm.com/think/topics/retrieval-augmented-generation",
+                     *           "domain": "ibm.com"
+                     *         }
+                     *       ],
+                     *       "results": [
+                     *         {
+                     *           "index": 1,
+                     *           "title": "Retrieval-augmented generation",
+                     *           "link": "https://en.wikipedia.org/wiki/Retrieval-augmented_generation",
+                     *           "domain": "en.wikipedia.org"
+                     *         },
+                     *         {
+                     *           "index": 2,
+                     *           "title": "What is RAG?",
+                     *           "link": "https://www.ibm.com/think/topics/retrieval-augmented-generation",
+                     *           "domain": "ibm.com"
+                     *         }
+                     *       ],
+                     *       "meta": {
+                     *         "request_id": "req_01J9",
+                     *         "credits_used": 6,
+                     *         "credits": {
+                     *           "search": 4,
+                     *           "answer": 2
+                     *         },
+                     *         "cached": false,
+                     *         "engine": "google",
+                     *         "latency_ms": 4410,
+                     *         "llm": {
+                     *           "provider": "anthropic",
+                     *           "model": "claude-haiku-5-5",
+                     *           "input_tokens": 3120,
+                     *           "output_tokens": 88
+                     *         }
+                     *       }
+                     *     }
+                     */
+                    "application/json": components["schemas"]["AnswerResponse"];
+                    /**
+                     * @example event: results
+                     *     data: {"request":{"endpoint":"answer","q":"what is retrieval-augmented generation"},"results":[{"index":1,"title":"Retrieval-augmented generation","link":"https://en.wikipedia.org/wiki/Retrieval-augmented_generation","domain":"en.wikipedia.org"}]}
+                     *
+                     *     event: delta
+                     *     data: {"text":"Retrieval-augmented generation grounds "}
+                     *
+                     *     event: done
+                     *     data: {"answer":"Retrieval-augmented generation grounds a model's answer in documents retrieved at query time [1].","citations":[{"index":1,"title":"Retrieval-augmented generation","link":"https://en.wikipedia.org/wiki/Retrieval-augmented_generation","domain":"en.wikipedia.org"}],"meta":{"request_id":"req_01J9","credits_used":3,"cached":false}}
+                     */
+                    "text/event-stream": string;
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createResearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "input": "compare espresso machines under $500 for a small office",
+                 *       "effort": "standard",
+                 *       "output_schema": {
+                 *         "type": "object",
+                 *         "properties": {
+                 *           "winner": {
+                 *             "type": "string"
+                 *           }
+                 *         }
+                 *       }
+                 *     }
+                 */
+                "application/json": components["schemas"]["ResearchRequest"];
+            };
+        };
+        responses: {
+            202: components["responses"]["TaskAccepted"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getResearch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResearchTask"];
+                };
+            };
+            401: components["responses"]["Error"];
+            404: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+        };
+    };
+    cancelResearch: {
         parameters: {
             query?: never;
             header?: never;
@@ -3423,6 +3991,28 @@ export interface operations {
         };
     };
     crawlCompletedWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskCompletedEvent"];
+            };
+        };
+        responses: {
+            /** @description Any 2xx acknowledges the delivery */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    researchCompletedWebhook: {
         parameters: {
             query?: never;
             header?: never;

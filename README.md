@@ -95,11 +95,16 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `autocomplete(params)` | `POST /v1/autocomplete` | `SearchParams` | `AutocompleteResponse` (`results[].value`) |
 | `webpage(params)` | `POST /v1/webpage` | `WebpageParams` (`url`, `include_html`) | `WebpageResponse` (`markdown`, `text`, `metadata`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
-| `extract(params)` | `POST /v1/extract` | `ExtractParams` (`urls` ≤ 20, `format`, `query`, `highlights`, …) | `ExtractResponse` (`results`, `failed`) |
+| `answer(params)` | `POST /v1/answer` | `AnswerParams` (`q`, `depth`: `fast`\|`standard`, `num_sources` 1-5, `output_schema`, search options) | `AnswerResponse` (`answer`, `citations`, `results`, `output`) |
+| `answerStream(params)` | `POST /v1/answer` (`stream: true`) | `AnswerParams` | `AsyncIterable<AnswerStreamEvent>` (`results`, `delta`…, `done`) |
+| `extract(params)` | `POST /v1/extract` | `ExtractParams` (`urls` ≤ 20, `format`, `query`, `highlights`, `summary`, `output_schema`, `prompt`, …) | `ExtractResponse` (`results`, `failed`) |
 | `map(params)` | `POST /v1/map` | `MapParams` (`url`, `search`, `limit`, `sitemap`, path filters) | `MapResponse` (`results[].url`) |
 | `crawl(params)` | `POST /v1/crawl` | `CrawlParams` (`url`, `limit` ≤ 1000, `max_depth` ≤ 10, …) | `TaskCreated` (`202`) |
 | `getCrawl(id)` / `cancelCrawl(id)` | `GET` / `DELETE /v1/crawl/{id}` | task id | `CrawlTask` / `TaskCancelResponse` |
 | `waitForCrawl(idOrTask, options?)` | polls `GET /v1/crawl/{id}` | task id or task | `CrawlTask` (`completed`, `failed` or `canceled`) |
+| `research(params)` | `POST /v1/research` | `ResearchParams` (`input`, `effort`: `lite`\|`standard`\|`deep`, `output_schema`, domains, `webhook_url`) | `TaskCreated` (`202`) |
+| `getResearch(id)` / `cancelResearch(id)` | `GET` / `DELETE /v1/research/{id}` | task id | `ResearchTask` / `TaskCancelResponse` |
+| `waitResearch(idOrTask, options?)` | polls `GET /v1/research/{id}` | task id or task | `ResearchTask` (`completed`, `failed` or `canceled`) |
 | `monitors.create/list/get/update/delete/run` | `/v1/monitors…` | `MonitorCreateParams`, `MonitorUpdateParams` | `Monitor`, `MonitorList` |
 | `monitors.runs(id, params?)` / `monitors.iterRuns(id)` | `GET /v1/monitors/{id}/runs` | `limit`, `before` | `MonitorRunList` / `AsyncIterable<MonitorRun>` |
 | `account()` | `GET /v1/account` | none | `Account` (`balance`, `plan`, `rate_limit_rps`, `month`, …) |
@@ -111,7 +116,7 @@ Common `SearchParams`: `q` (required), `country` (default `us`), `language` (def
 `location`, `uule`, `num` (10, or 100 for the depth bundle), `page` (1-10), `time`
 (`hour`|`day`|`week`|`month`|`year`), `tbs`, `device` (`desktop`|`mobile`), `safe`, `autocorrect`,
 `format` (`json`|`markdown`|`compact`), `fields`, `include_content` (0-5), `ads`, `max_age`,
-`engine`.
+`engine`, `include_answer` (`search` and `news`).
 
 ### Examples
 
@@ -203,6 +208,68 @@ await sk.news({ q: "espresso", engine: ["google", "brave"] });
   and its `outcome` (absent on cache hits). `request.engine` echoes what you asked for.
 - Credits (`meta.credits_used`, `X-Credits-Used`) follow the answering provider's price.
 
+## AI answers
+
+```ts
+// A cited answer grounded on live Google results ("fast" answers from the result page;
+// "standard", the default, also reads the top num_sources pages)
+const res = await sk.answer({ q: "what is retrieval-augmented generation", depth: "fast" });
+console.log(res.answer); // Markdown with [1] markers
+for (const c of res.citations) console.log(c.index, c.title, c.link);
+console.log(res.meta.credits, res.meta.llm); // { search, answer }, { provider, model, … }
+
+// Stream it: results first, then text deltas, then done (final answer, citations, meta)
+for await (const ev of sk.answerStream({ q: "what is retrieval-augmented generation" })) {
+  if (ev.event === "delta") process.stdout.write(ev.data.text);
+  if (ev.event === "done") console.log("\n", ev.data.citations);
+}
+
+// Structured output: the answer as JSON matching your schema (not with streaming)
+const facts = await sk.answer({
+  q: "tallest building in the world",
+  output_schema: { type: "object", properties: { name: { type: "string" }, height_m: { type: "number" } } },
+});
+console.log(facts.output);
+
+// A cited answer on top of a normal search or news response
+const news = await sk.news({ q: "ECB rate decision", time: "day", include_answer: true });
+console.log(news.answer?.text, news.meta.warnings); // no answer + a warning (refunded) if the model failed
+```
+
+- A stream's `error` event (and a model failure on `answer`) is thrown as `SerpKiteError` with code
+  `ai_unavailable` (503); the model part is not charged. Breaking out of the `for await` loop
+  closes the connection and the model part is not charged either.
+- `extract` takes `summary: true` (an AI summary per page) and `output_schema` (+ optional
+  `prompt`; each page's data as JSON in `output`), each at an extra per-page price. A page whose
+  model step failed carries `summary_error` / `output_error` instead and isn't charged for it. Its
+  default `timeout` becomes 75 seconds with either.
+- AI prices (answers, `include_answer`, summaries, schema extraction, research) are listed at
+  [serpkite.com/pricing](https://serpkite.com/pricing); `meta.credits` on an answer splits the
+  search and the model part.
+
+## Research
+
+```ts
+const task = await sk.research({
+  input: "Compare managed Postgres vector search options in 2026",
+  effort: "standard", // lite | standard (default) | deep
+});
+const done = await sk.waitResearch(task); // polls until completed/failed/canceled (15 min default)
+if (done.status === "completed") {
+  console.log(done.result?.report); // Markdown report with [n] citations
+  for (const s of done.result?.sources ?? []) console.log(s.index, s.link, s.query);
+}
+```
+
+- Each `effort` has a flat price ([serpkite.com/pricing](https://serpkite.com/pricing)), reserved
+  up front and charged only when the report is written; failed research is refunded. `getResearch(id)` shows `progress` (`round`, `queries`, `sources`, `step`) while it
+  runs. `cancelResearch(id)` refunds a queued task; a running one stops at its next round and is
+  charged for the searches already run.
+- `output_schema` also returns the report as JSON in `result.output`; `include_domains` /
+  `exclude_domains`, `country` and `language` steer the searches.
+- Pass `webhook_url` to get a signed `research.completed` delivery (same envelope as
+  `crawl.completed`) instead of polling.
+
 ## Map and extract
 
 ```ts
@@ -286,7 +353,7 @@ resumes it. `webhook_url: ""` removes the webhook; a changed search reports ever
 
 ## Webhooks
 
-Every delivery (`batch.completed`, `crawl.completed`, `monitor.results`) is signed with
+Every delivery (`batch.completed`, `crawl.completed`, `research.completed`, `monitor.results`) is signed with
 `X-SerpKite-Signature`. `parseWebhook` verifies it and returns the event typed by
 `X-SerpKite-Event`, with `deliveryId` from `X-SerpKite-Delivery` (for `monitor.results`, the
 `run_id`) to deduplicate retries:
@@ -362,6 +429,7 @@ try {
 | `rate_limited` | 429 | Too many requests (retried automatically) |
 | `upstream_error`, `upstream_blocked` | 503 | Google could not be fetched (not billed, retried) |
 | `upstream_timeout` | 503 | The search took too long (not billed, retried) |
+| `ai_unavailable` | 503 | The AI model failed or AI is off (model part refunded; honours `Retry-After`) |
 | `unavailable` | 503 | Temporarily unavailable (retried) |
 | `internal` | 500 | Server error (retried) |
 | `connection_error`, `timeout` | 0 | No response received |
@@ -374,8 +442,10 @@ Failed, empty and blocked searches are refunded, so they never cost credits.
 Requests are retried up to `maxRetries` times (default 2) on `429`, `5xx`, network errors and
 timeouts, with exponential backoff (`retryDelayMs · 2^attempt`, capped at 8 s) and jitter. A
 `Retry-After` header (seconds or HTTP date, capped at 60 s) takes precedence. Other `4xx` errors
-are never retried. `batches.create`, `crawl`, `monitors.create` and `monitors.run` retry only on
-`429`, so a lost response can never queue (and bill) the same work twice.
+are never retried. `batches.create`, `crawl`, `research`, `extract`, `answer`, `monitors.create`
+and `monitors.run` retry only on `429`, so a lost response can never queue (and bill) the same
+work twice. `answerStream` retries only until the stream starts. `answer` and `answerStream` wait
+at least 100 s for the response headers (the search runs first) unless you pass `timeoutMs`.
 
 ## Types
 
@@ -387,7 +457,9 @@ Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `RankResponse`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse`, `MapResponse`, `ExtractResponse`, `CrawlParams`, `CrawlTask`, `CrawlResult`,
-`TaskCreated`, `Monitor`, `MonitorRun`, `MonitorPageChange`, `TaskCompletedEvent`,
+`TaskCreated`, `AnswerParams`, `AnswerResponse`, `AnswerStreamEvent`, `Citation`, `SearchAnswer`,
+`LLMUsage`, `ResearchParams`, `ResearchTask`, `ResearchResult`, `ResearchSource`,
+`Monitor`, `MonitorRun`, `MonitorPageChange`, `TaskCompletedEvent`,
 `MonitorResultsEvent`, `WebhookEvent` and more. The raw
 `paths`, `components` and `operations` types are exported as well.
 

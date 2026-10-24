@@ -22,7 +22,7 @@ function header(headers: HeaderSource, name: string): string | undefined {
 }
 
 /**
- * Checks a webhook delivery (any event: `batch.completed`, `crawl.completed`,
+ * Checks a webhook delivery (any event: `batch.completed`, `crawl.completed`, `research.completed`,
  * `monitor.results`): `X-SerpKite-Signature` must be
  * `v1=<hex HMAC-SHA256(secret, "<X-SerpKite-Timestamp>.<raw body>")>` and the
  * timestamp recent. Pass the raw request body exactly as received (not
@@ -70,7 +70,7 @@ export async function verifyWebhook(
  * Verifies a delivery (see {@link verifyWebhook}) and returns it typed by its
  * `X-SerpKite-Event` header. `deliveryId` is `X-SerpKite-Delivery` (for
  * `monitor.results` it equals `data.run_id`): use it to deduplicate retries. A
- * `crawl.completed` result over 4 MB arrives as `result: null` with
+ * `crawl.completed` or `research.completed` result over 4 MB arrives as `result: null` with
  * `result_omitted: true`; fetch it from `data.poll_url`. Throws a
  * `SerpKiteError` with code `invalid_signature` when the signature or timestamp
  * doesn't check out.

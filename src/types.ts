@@ -94,6 +94,15 @@ export type MapURL = Schemas["MapURL"];
 export type ExtractResult = Schemas["ExtractResult"];
 export type ExtractFailure = Schemas["ExtractFailure"];
 export type RankMatch = Schemas["RankResponse"]["matches"][number];
+/** A source an AI answer or report cites with an `[index]` marker. */
+export type Citation = Schemas["Citation"];
+/**
+ * `include_answer: true` on `search` / `news`: a cited answer over the response's results
+ * (`text` with `[n]` markers). Absent when the model failed (refunded, see `meta.warnings`).
+ */
+export type SearchAnswer = Schemas["SearchAnswer"];
+/** `meta.llm`: the model behind an AI response and the tokens it used. */
+export type LLMUsage = Schemas["LLMUsage"];
 
 // ── Responses ───────────────────────────────────────────────────────────
 
@@ -125,6 +134,32 @@ export interface CompactResponse {
   meta: Meta;
   [key: string]: unknown;
 }
+
+// ── Answer ──────────────────────────────────────────────────────────────
+
+/** Body of `POST /v1/answer` (`stream` is set by `answerStream`). */
+export type AnswerParams = Omit<Schemas["AnswerRequest"], "engine" | "stream"> & {
+  /** Search providers allowed to answer. Default `"google"`. See {@link Engine}. */
+  engine?: Engine;
+};
+export type AnswerResponse = Schemas["AnswerResponse"];
+/** A result the answer may cite, numbered as in the prompt (`[index]`). */
+export type AnswerSource = Schemas["AnswerSource"];
+/** `meta` of an answer: `credits` splits `credits_used` into search and model; `llm` names the model. */
+export type AnswerMeta = Schemas["AnswerMeta"];
+export type AnswerStreamResults = Schemas["AnswerStreamResults"];
+export type AnswerStreamDelta = Schemas["AnswerStreamDelta"];
+export type AnswerStreamDone = Schemas["AnswerStreamDone"];
+
+/**
+ * One Server-Sent Event of `answerStream`: `results` first, then `delta` pieces of text,
+ * then `done` with the final answer, citations and meta. A server `error` event is thrown
+ * as a `SerpKiteError` instead of being yielded.
+ */
+export type AnswerStreamEvent =
+  | { event: "results"; data: AnswerStreamResults }
+  | { event: "delta"; data: AnswerStreamDelta }
+  | { event: "done"; data: AnswerStreamDone };
 
 // ── Batches ─────────────────────────────────────────────────────────────
 
@@ -171,7 +206,7 @@ export type BatchCreateParams = {
 // ── Async tasks: crawl ──────────────────────────────────────────────────
 
 export type TaskStatus = Schemas["TaskStatus"];
-/** The `202` body of `crawl`. */
+/** The `202` body of `crawl` and `research`. */
 export type TaskCreated = Schemas["TaskCreated"];
 export type TaskCancelResponse = Schemas["TaskCancelResponse"];
 export type TaskError = Schemas["TaskError"];
@@ -191,6 +226,27 @@ export type CrawlStats = CrawlResult["stats"];
 /** Why a crawl ended (`result.stats.stopped`). */
 export type CrawlStopReason = NonNullable<CrawlStats["stopped"]>;
 export type CrawlPage = Schemas["CrawlPage"];
+
+// ── Async tasks: research ───────────────────────────────────────────────
+
+/**
+ * Body of `POST /v1/research`: `input` (the task in plain words), `effort` (`lite`, `standard`
+ * (default) or `deep`; flat prices at https://serpkite.com/pricing), optional `output_schema`,
+ * locale, domain filters and `webhook_url` (receives `research.completed`).
+ */
+export type ResearchParams = Schemas["ResearchRequest"];
+export type ResearchEffort = NonNullable<ResearchParams["effort"]>;
+export type ResearchResult = Schemas["ResearchResult"];
+export type ResearchSource = Schemas["ResearchSource"];
+/**
+ * A research task. `result` is set once the report is written (`status: "completed"`); a
+ * failed or canceled task may carry a partial result with only `queries`.
+ */
+export type ResearchTask = Omit<Schemas["ResearchTask"], "result"> & {
+  result?: ResearchResult | null;
+};
+/** `progress` of a running research task (round, queries, sources, current step). */
+export type ResearchProgress = NonNullable<Schemas["ResearchTask"]["progress"]>;
 
 // ── Monitors ────────────────────────────────────────────────────────────
 
@@ -245,10 +301,17 @@ export type BatchCompletedEvent = Omit<Batch, "poll_url" | "webhook_url" | "webh
   event: "batch.completed";
 };
 /**
- * Body of `crawl.completed`. When the result is over 4 MB, `result` is null and
+ * Body of `crawl.completed` and `research.completed` (`kind` says which; `result` is a
+ * `CrawlResult` or `ResearchResult`). When the result is over 4 MB, `result` is null and
  * `result_omitted` is true: fetch the task from `poll_url`.
  */
 export type TaskCompletedEvent = Schemas["TaskCompletedEvent"];
+/** Body of `research.completed`: a {@link TaskCompletedEvent} whose `result` is a `ResearchResult`. */
+export type ResearchCompletedEvent = Omit<TaskCompletedEvent, "event" | "kind" | "result"> & {
+  event: "research.completed";
+  kind: "research";
+  result?: ResearchResult | null;
+};
 /**
  * Body of `monitor.results`. `run_id` is also the `X-SerpKite-Delivery` header (dedupe retries
  * on it). Carries the monitor's `metadata`, and `url` for webpage monitors (whose `new_results`
@@ -260,6 +323,7 @@ export type MonitorResultsEvent = Schemas["MonitorResultsEvent"];
 export type WebhookEventType =
   | "batch.completed"
   | "crawl.completed"
+  | "research.completed"
   | "monitor.results"
   | (string & {});
 
@@ -267,4 +331,5 @@ export type WebhookEventType =
 export type WebhookEvent =
   | { type: "batch.completed"; deliveryId: string | undefined; data: BatchCompletedEvent }
   | { type: "crawl.completed"; deliveryId: string | undefined; data: TaskCompletedEvent }
+  | { type: "research.completed"; deliveryId: string | undefined; data: ResearchCompletedEvent }
   | { type: "monitor.results"; deliveryId: string | undefined; data: MonitorResultsEvent };
