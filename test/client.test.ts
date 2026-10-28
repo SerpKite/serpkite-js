@@ -544,6 +544,32 @@ describe("SerpKite", () => {
     expect(m.seen).toHaveLength(2);
   });
 
+  test("daily_limit_reached is raised at once, not retried", async () => {
+    const m = mockFetch(
+      json(
+        errorBody(
+          "daily_limit_reached",
+          "daily free limit of 500 credits reached; resets 00:00 UTC. Buy any pack at https://app.serpkite.com/billing to remove it",
+        ),
+        429,
+        {
+          "retry-after": "3600",
+        },
+      ),
+      json(searchBody),
+    );
+    const t0 = performance.now();
+    const err = await client(m.fetch)
+      .search({ q: "x" })
+      .catch((e) => e);
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(err).toBeInstanceOf(SerpKiteError);
+    expect(err.status).toBe(429);
+    expect(err.code).toBe("daily_limit_reached");
+    expect(err.message).toContain("https://app.serpkite.com/billing");
+    expect(m.seen).toHaveLength(1);
+  });
+
   test("per-attempt timeout", async () => {
     // A fetch that rejects when its signal aborts.
     const f = ((_: string, init?: RequestInit) =>

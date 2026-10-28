@@ -1,4 +1,4 @@
-import { errorFromResponse, SerpKiteError } from "./errors";
+import { errorFromResponse, NON_RETRYABLE_CODES, SerpKiteError } from "./errors";
 import type {
   Account,
   AnswerParams,
@@ -48,7 +48,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.8.0";
+export const VERSION = "0.8.1";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -717,11 +717,16 @@ export class SerpKite {
         const text = await r.text().catch(() => "");
         t.cleanup();
         // Nothing is charged before the stream starts, so 5xx are safe to retry.
-        if (canRetry && (r.status === 429 || r.status >= 500)) {
+        const error = errorFromResponse(r.status, r.headers, text);
+        if (
+          canRetry &&
+          (r.status === 429 || r.status >= 500) &&
+          !NON_RETRYABLE_CODES.has(error.code)
+        ) {
           await sleep(this.#retryDelay(attempt, r.headers), options.signal);
           continue;
         }
-        throw errorFromResponse(r.status, r.headers, text);
+        throw error;
       }
       // Stop the connect timer but keep forwarding the caller's abort signal.
       t.stopTimer();
@@ -889,12 +894,15 @@ export class SerpKite {
       cleanup();
 
       if (!res.ok) {
-        const retryable = res.status === 429 || (res.status >= 500 && call.retry !== "rate_limit");
+        const error = errorFromResponse(res.status, res.headers, text);
+        const retryable =
+          (res.status === 429 && !NON_RETRYABLE_CODES.has(error.code)) ||
+          (res.status >= 500 && call.retry !== "rate_limit");
         if (canRetry && retryable) {
           await sleep(this.#retryDelay(attempt, res.headers), options.signal);
           continue;
         }
-        throw errorFromResponse(res.status, res.headers, text);
+        throw error;
       }
 
       options.onResponse?.(responseInfo(res));

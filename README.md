@@ -480,6 +480,7 @@ try {
 | `forbidden` | 403 | Not allowed |
 | `not_found` | 404 | Unknown batch id |
 | `rate_limited` | 429 | Too many requests (retried automatically) |
+| `daily_limit_reached` | 429 | The free daily limit is used up until 00:00 UTC; buying any pack removes it (never retried) |
 | `upstream_error`, `upstream_blocked` | 503 | Google could not be fetched (not billed, retried) |
 | `upstream_timeout` | 503 | The search took too long (not billed, retried) |
 | `ai_unavailable` | 503 | The AI model failed or AI is off (model part refunded; honours `Retry-After`) |
@@ -492,8 +493,8 @@ Failed, empty and blocked searches are refunded, so they never cost credits.
 
 ## Retries
 
-Requests are retried up to `maxRetries` times (default 2) on `429`, `5xx`, network errors and
-timeouts, with exponential backoff (`retryDelayMs · 2^attempt`, capped at 8 s) and jitter. A
+Requests are retried up to `maxRetries` times (default 2) on `429` (except
+`daily_limit_reached`), `5xx`, network errors and timeouts, with exponential backoff (`retryDelayMs · 2^attempt`, capped at 8 s) and jitter. A
 `Retry-After` header (seconds or HTTP date, capped at 60 s) takes precedence. Other `4xx` errors
 are never retried. `batches.create`, `crawl`, `research`, `extract`, `answer`, the AI assistant
 methods, `monitors.create` and `monitors.run` retry only on `429`, so a lost response can never queue (and bill) the same

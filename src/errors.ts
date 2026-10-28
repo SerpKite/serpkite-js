@@ -45,6 +45,12 @@ const fallbackCodes: Record<number, string> = {
 };
 
 /** Builds a SerpKiteError from a non-2xx response body (JSON envelope or anything else). */
+/**
+ * Codes a retry can't fix: the free daily limit lasts until 00:00 UTC (its
+ * Retry-After), so the error is raised at once instead of stalling.
+ */
+export const NON_RETRYABLE_CODES: ReadonlySet<string> = new Set(["daily_limit_reached"]);
+
 export function errorFromResponse(status: number, headers: Headers, body: string): SerpKiteError {
   let code = fallbackCodes[status] ?? (status >= 500 ? "server_error" : "http_error");
   let message = body.trim().slice(0, 500) || `HTTP ${status}`;
