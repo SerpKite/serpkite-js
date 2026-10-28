@@ -4,11 +4,14 @@ import type {
   AnswerParams,
   AnswerResponse,
   AnswerStreamEvent,
+  AssistantParams,
+  AssistantResponse,
   AutocompleteResponse,
   Batch,
   BatchCreateEntry,
   BatchCreateParams,
   BatchCreateResponse,
+  ChatGPTParams,
   CompactResponse,
   CrawlParams,
   CrawlTask,
@@ -45,7 +48,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -122,6 +125,9 @@ export interface VerticalMethod<P, R> {
 }
 
 type Method = "GET" | "POST" | "PATCH" | "DELETE";
+
+/** Minimum per-attempt timeout of the AI assistant methods: answers take 10-90 s. */
+export const ASSISTANT_TIMEOUT_MS = 120_000;
 
 /** Task states after which `waitForCrawl` and `waitResearch` return. */
 const TASK_DONE = new Set(["completed", "failed", "canceled"]);
@@ -209,6 +215,26 @@ export class SerpKite {
   readonly autocomplete = this.#vertical<SearchParams, AutocompleteResponse>("/v1/autocomplete");
   /** Fetch any public URL as clean Markdown plus metadata. */
   readonly webpage = this.#vertical<WebpageParams, WebpageResponse>("/v1/webpage");
+
+  // ── AI assistants ─────────────────────────────────────────────────────
+  // Billed even when the response is lost: retried only on 429 (failed, refused and empty
+  // answers are free), and each attempt waits at least 120 s (answers take 10-90 s).
+
+  /**
+   * Ask ChatGPT as a logged-out user: the answer (`text`, `markdown`), cited `sources`,
+   * `search_queries`, `products`, `places` and the guest `model`. `web_search` (default true)
+   * makes it search the web; `country` asks from an exit in that country. `track` returns
+   * `mentions` of your brands and domains. 5 credits.
+   */
+  readonly chatgpt = this.#assistant<ChatGPTParams>("/v1/chatgpt");
+  /** Ask Google Gemini as a logged-out user: the answer with the sources it grounded on. 5 credits. */
+  readonly gemini = this.#assistant<AssistantParams>("/v1/gemini");
+  /** Microsoft Copilot Search on Bing: the answer, cited sources and products. 3 credits. */
+  readonly copilot = this.#assistant<AssistantParams>("/v1/copilot");
+  /** Google AI Mode: the answer, cited sources and products. 3 credits. */
+  readonly aiMode = this.#assistant<AssistantParams>("/v1/ai_mode");
+  /** Brave Search's AI answer: cited sources, the searches it ran and products. 2 credits. */
+  readonly braveAi = this.#assistant<AssistantParams>("/v1/brave_ai");
 
   /** Position of `domain` for keyword `q` in the top `num` results (default 100). */
   rank(params: RankParams, options?: RequestOptions): Promise<RankResponse> {
@@ -423,7 +449,9 @@ export class SerpKite {
      * and reports it (`MonitorPageChange`) when its content changes. `metadata` (your JSON
      * object, at most 2 KB) is echoed on the monitor and in its webhooks. Without a
      * `webhook_url`, read new results from `monitors.runs`. `active: false`
-     * creates it paused. A monitor pauses itself after 10 failed runs in a row
+     * creates it paused. With an AI assistant `endpoint` (`chatgpt`, `gemini`, `copilot`,
+     * `ai_mode`, `brave_ai`) and a `prompt` every run reports the answer (`MonitorAnswer`:
+     * sources, `new_sources`, `mentions` with `track`). A monitor pauses itself after 10 failed runs in a row
      * (`last_status: "paused"`); `update(id, { active: true })` resumes it. Each run costs
      * what its search costs. Only retried on 429.
      */
@@ -590,6 +618,22 @@ export class SerpKite {
   #vertical<P, R>(path: string): VerticalMethod<P, R> {
     return ((params: P, options?: RequestOptions) =>
       this.request({ method: "POST", path, body: params, options })) as VerticalMethod<P, R>;
+  }
+
+  #assistant<P>(path: string): VerticalMethod<P, AssistantResponse> {
+    return ((params: P, options?: RequestOptions) =>
+      this.request({
+        method: "POST",
+        path,
+        body: params,
+        options: {
+          ...options,
+          timeoutMs:
+            options?.timeoutMs ??
+            (this.timeoutMs > 0 ? Math.max(this.timeoutMs, ASSISTANT_TIMEOUT_MS) : 0),
+        },
+        retry: "rate_limit",
+      })) as VerticalMethod<P, AssistantResponse>;
   }
 
   async #wait(idOrEntry: string | BatchCreateEntry | undefined, o: WaitOptions): Promise<Batch> {

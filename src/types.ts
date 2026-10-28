@@ -46,6 +46,14 @@ export type WebpageParams = Schemas["WebpageRequest"];
 export type RankParams = Schemas["RankRequest"];
 export type MapParams = Schemas["MapRequest"];
 export type ExtractParams = Schemas["ExtractRequest"];
+/**
+ * Body of `gemini`, `copilot`, `aiMode` and `braveAi`: `prompt` (required), `country`, `language`,
+ * `track` (brands and domains to look for, returned in `mentions`), `include_html`, `format`,
+ * `fields`, `max_age`.
+ */
+export type AssistantParams = Schemas["AssistantRequest"];
+/** Body of `chatgpt`: like {@link AssistantParams} plus `web_search` (default true), without `language`. */
+export type ChatGPTParams = Schemas["ChatGPTRequest"];
 
 /** `format` values accepted by the verticals. */
 export type Format = NonNullable<SearchParams["format"]>;
@@ -103,6 +111,18 @@ export type Citation = Schemas["Citation"];
 export type SearchAnswer = Schemas["SearchAnswer"];
 /** `meta.llm`: the model behind an AI response and the tokens it used. */
 export type LLMUsage = Schemas["LLMUsage"];
+/** A source of an AI assistant answer or AI Overview; `cited` when the answer cites it inline. */
+export type AISource = Schemas["AISource"];
+/** A product an AI assistant showed (price as shown, `extracted_price`, `currency`, merchant…). */
+export type AIProduct = Schemas["AIProduct"];
+/**
+ * One `track` term checked against an AI answer: `mentioned` (the text names it), `cited` (a cited
+ * source matches it), the matching `sources` / `products` positions and `text_position` (0-1, -1
+ * when the text doesn't name it).
+ */
+export type Mention = Schemas["Mention"];
+/** `ai_overview` on `search`: Google's AI Overview when the page showed one. */
+export type AIOverview = Schemas["AIOverview"];
 
 // ── Responses ───────────────────────────────────────────────────────────
 
@@ -122,6 +142,14 @@ export type WebpageResponse = Schemas["WebpageResponse"];
 export type RankResponse = Schemas["RankResponse"];
 export type MapResponse = Schemas["MapResponse"];
 export type ExtractResponse = Schemas["ExtractResponse"];
+/**
+ * Returned by `chatgpt`, `gemini`, `copilot`, `aiMode` and `braveAi`: the answer (`text`,
+ * `markdown` with `[n](link)` citations), `sources`, `search_queries`, `products`, `places`,
+ * `related_questions`, `model` where the assistant reports it, and `mentions` with `track`.
+ */
+export type AssistantResponse = Schemas["AssistantResponse"];
+/** The AI assistant endpoints (also accepted by batches and monitors). */
+export type AssistantEndpoint = "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
 export type Account = Schemas["Account"];
 export type Status = Schemas["Status"];
 
@@ -190,6 +218,11 @@ type BatchRequestMap = {
   patents: SearchParams;
   autocomplete: SearchParams;
   webpage: WebpageParams;
+  chatgpt: ChatGPTParams;
+  gemini: AssistantParams;
+  copilot: AssistantParams;
+  ai_mode: AssistantParams;
+  brave_ai: AssistantParams;
 };
 
 /** Body of `POST /v1/batches`. `requests` takes the same fields as the realtime endpoint. */
@@ -252,7 +285,10 @@ export type ResearchProgress = NonNullable<Schemas["ResearchTask"]["progress"]>;
 
 /**
  * Body of `POST /v1/monitors`. `search` and `news` monitors need `q`; `webpage` monitors need
- * `url` (and take only `country` besides) and report the page when its content changes.
+ * `url` (and take only `country` besides) and report the page when its content changes. AI
+ * assistant monitors (`chatgpt`, `gemini`, `copilot`, `ai_mode`, `brave_ai`) need `prompt` and take
+ * `country`, `language` (not chatgpt), `web_search` (chatgpt) and `track`; every run reports the
+ * answer as a {@link MonitorAnswer}.
  * `metadata` is your own JSON object (at most 2 KB), echoed on the monitor and its webhooks.
  * `webhook_url` is optional: without one, new results are read from the run history
  * (`monitors.runs`). `active: false` creates the monitor paused.
@@ -271,7 +307,10 @@ export type MonitorUpdateParams = Omit<Schemas["MonitorUpdateRequest"], "engine"
   engine?: Engine;
 };
 export type Monitor = Schemas["Monitor"];
-/** What a monitor watches: a `search`, `news` search, or a `webpage` for content changes. */
+/**
+ * What a monitor watches: a `search`, `news` search, a `webpage` for content changes, or an AI
+ * assistant's answer to a prompt (`chatgpt`, `gemini`, `copilot`, `ai_mode`, `brave_ai`).
+ */
 export type MonitorEndpoint = Monitor["endpoint"];
 /** Your own JSON object on a monitor (at most 2 KB), echoed in `monitor.results`. */
 export type MonitorMetadata = NonNullable<Monitor["metadata"]>;
@@ -280,13 +319,19 @@ export type MonitorMetadata = NonNullable<Monitor["metadata"]>;
  * the page when first seen (`change: "new"`) or when its content changed (`"changed"`).
  */
 export type MonitorPageChange = Schemas["MonitorPageChange"];
+/**
+ * The result item of an AI assistant monitor: one per run (every run reports the answer), with
+ * `new_sources` (source links not seen in earlier runs) and, with `track`, `mentions`.
+ */
+export type MonitorAnswer = Schemas["MonitorAnswer"];
 /** `last_status` of a monitor; `"paused"` after 10 failed runs in a row. */
 export type MonitorStatus = NonNullable<Monitor["last_status"]>;
 export type MonitorList = Schemas["MonitorList"];
 export type MonitorSearch = Schemas["MonitorSearch"];
 /**
  * One run of a monitor. `results` holds the new results (null when none, or after 24 hours):
- * `OrganicResult`-shaped for search, `NewsResult` for news, {@link MonitorPageChange} for webpage.
+ * `OrganicResult`-shaped for search, `NewsResult` for news, {@link MonitorPageChange} for webpage,
+ * one {@link MonitorAnswer} for AI assistants.
  */
 export type MonitorRun = Schemas["MonitorRun"];
 /** A page of runs, newest first. Pass `next_before` as `before` for the next page. */
@@ -315,7 +360,8 @@ export type ResearchCompletedEvent = Omit<TaskCompletedEvent, "event" | "kind" |
 /**
  * Body of `monitor.results`. `run_id` is also the `X-SerpKite-Delivery` header (dedupe retries
  * on it). Carries the monitor's `metadata`, and `url` for webpage monitors (whose `new_results`
- * are {@link MonitorPageChange} items and `q` is empty).
+ * are {@link MonitorPageChange} items and `q` is empty). AI assistant monitors send `prompt`
+ * instead of `q` and one {@link MonitorAnswer} in `new_results`.
  */
 export type MonitorResultsEvent = Schemas["MonitorResultsEvent"];
 

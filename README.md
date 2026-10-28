@@ -94,6 +94,8 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `patents(params)` | `POST /v1/patents` | `SearchParams` | `PatentsResponse` |
 | `autocomplete(params)` | `POST /v1/autocomplete` | `SearchParams` | `AutocompleteResponse` (`results[].value`) |
 | `webpage(params)` | `POST /v1/webpage` | `WebpageParams` (`url`, `include_html`) | `WebpageResponse` (`markdown`, `text`, `metadata`) |
+| `chatgpt(params)` | `POST /v1/chatgpt` | `ChatGPTParams` (`prompt`, `web_search`, `country`, `track`, `include_html`) | `AssistantResponse` |
+| `gemini` / `copilot` / `aiMode` / `braveAi(params)` | `POST /v1/gemini` / `copilot` / `ai_mode` / `brave_ai` | `AssistantParams` (`prompt`, `country`, `language`, `track`, `include_html`) | `AssistantResponse` (`text`, `markdown`, `sources`, `search_queries`, `products`, `places`, `mentions`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
 | `answer(params)` | `POST /v1/answer` | `AnswerParams` (`q`, `depth`: `fast`\|`standard`, `num_sources` 1-5, `output_schema`, search options) | `AnswerResponse` (`answer`, `citations`, `results`, `output`) |
 | `answerStream(params)` | `POST /v1/answer` (`stream: true`) | `AnswerParams` | `AsyncIterable<AnswerStreamEvent>` (`results`, `delta`…, `done`) |
@@ -247,6 +249,42 @@ console.log(news.answer?.text, news.meta.warnings); // no answer + a warning (re
   [serpkite.com/pricing](https://serpkite.com/pricing); `meta.credits` on an answer splits the
   search and the model part.
 
+## AI assistants
+
+Ask ChatGPT, Gemini, Copilot (Bing Copilot Search), Google AI Mode or Brave's AI answer a `prompt` as a
+logged-out user and get the answer with the sources it cited, the searches it ran and the products
+and places it showed. `track` lists brands and domains to look for: each comes back in `mentions`.
+
+```ts
+const res = await sk.chatgpt({
+  prompt: "What are the best CRMs for a 10-person startup?",
+  country: "us", // ask from an exit in this country (prices and shops follow it)
+  track: ["hubspot.com", "Pipedrive"],
+});
+console.log(res.model, res.markdown); // citations as [n](link), matching sources[].position
+for (const s of res.sources) console.log(s.position, s.cited ? "cited" : "listed", s.domain);
+console.log(res.search_queries, res.products.map((p) => `${p.title} ${p.price}`));
+for (const m of res.mentions ?? []) {
+  // mentioned: the text names it; cited: a cited source matches it; text_position 0-1 (-1: not named)
+  console.log(m.term, m.mentioned, m.cited, m.sources, m.text_position);
+}
+
+const md = await sk.aiMode({ prompt: "how to remove a red wine stain from wool", format: "markdown" }); // string
+await sk.gemini({ prompt: "Wie funktionieren Wärmepumpen?", country: "de", language: "de" });
+
+// Google's AI Overview on a normal search, when the page shows one
+const serp = await sk.search({ q: "how do heat pumps work" });
+console.log(serp.ai_overview?.text, serp.ai_overview?.sources);
+```
+
+- Prices per answer: ChatGPT 5, Gemini 5, Copilot 3, AI Mode 3, Brave AI 2 credits (the same in
+  batches; `max_age` cache hits half). Failed, refused and empty answers are free.
+- Answers take 10-90 s: these methods wait at least `ASSISTANT_TIMEOUT_MS` (120 s) per attempt
+  unless you pass `timeoutMs`, and are retried only on `429` (a lost response is still billed).
+- `web_search` (default `true`) is ChatGPT only; `language` isn't taken by ChatGPT.
+- Run many prompts through `batches.create({ endpoint: "chatgpt", requests: [{ prompt }, …] })`, or
+  track an answer over time with a monitor (`endpoint: "gemini"`, `prompt`, `track`; see Monitors).
+
 ## Research
 
 ```ts
@@ -335,6 +373,21 @@ per check) and reports it as a `MonitorPageChange` (`url`, `title`, `change: "ne
 stored on any monitor and echoed in its `monitor.results` webhooks; on `update`, an object replaces it
 and `null` clears it.
 
+An AI assistant monitor (`endpoint`: `chatgpt`, `gemini`, `copilot`, `ai_mode` or `brave_ai`) asks
+`prompt` every run and reports every answer as one `MonitorAnswer` (`text`, `markdown`, `model`,
+`sources`, `new_sources` (links not seen in earlier runs), `search_queries`, `products` and, with
+`track`, `mentions`); its `monitor.results` webhook carries `prompt` instead of `q`. Each run costs
+the endpoint's price.
+
+```ts
+await sk.monitors.create({
+  endpoint: "chatgpt",
+  prompt: "What are the best CRMs for a 10-person startup?",
+  track: ["hubspot.com", "Pipedrive"],
+  interval: "daily",
+});
+```
+
 ```ts
 const watch = await sk.monitors.create({
   endpoint: "webpage",
@@ -377,7 +430,7 @@ import { isBatchError, SerpKite } from "serpkite";
 
 const sk = new SerpKite();
 const { batches } = await sk.batches.create({
-  endpoint: "search", // or images, news, maps, reviews, webpage, …
+  endpoint: "search", // or images, news, maps, reviews, webpage, chatgpt, gemini, …
   requests: [{ q: "a" }, { q: "b" }],
   webhook_url: "https://example.com/hooks/serpkite", // optional
 });
@@ -442,8 +495,8 @@ Failed, empty and blocked searches are refunded, so they never cost credits.
 Requests are retried up to `maxRetries` times (default 2) on `429`, `5xx`, network errors and
 timeouts, with exponential backoff (`retryDelayMs · 2^attempt`, capped at 8 s) and jitter. A
 `Retry-After` header (seconds or HTTP date, capped at 60 s) takes precedence. Other `4xx` errors
-are never retried. `batches.create`, `crawl`, `research`, `extract`, `answer`, `monitors.create`
-and `monitors.run` retry only on `429`, so a lost response can never queue (and bill) the same
+are never retried. `batches.create`, `crawl`, `research`, `extract`, `answer`, the AI assistant
+methods, `monitors.create` and `monitors.run` retry only on `429`, so a lost response can never queue (and bill) the same
 work twice. `answerStream` retries only until the stream starts. `answer` and `answerStream` wait
 at least 100 s for the response headers (the search runs first) unless you pass `timeoutMs`.
 
@@ -458,7 +511,8 @@ Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse`, `MapResponse`, `ExtractResponse`, `CrawlParams`, `CrawlTask`, `CrawlResult`,
 `TaskCreated`, `AnswerParams`, `AnswerResponse`, `AnswerStreamEvent`, `Citation`, `SearchAnswer`,
-`LLMUsage`, `ResearchParams`, `ResearchTask`, `ResearchResult`, `ResearchSource`,
+`LLMUsage`, `AssistantParams`, `ChatGPTParams`, `AssistantResponse`, `AISource`, `AIProduct`,
+`Mention`, `AIOverview`, `MonitorAnswer`, `ResearchParams`, `ResearchTask`, `ResearchResult`, `ResearchSource`,
 `Monitor`, `MonitorRun`, `MonitorPageChange`, `TaskCompletedEvent`,
 `MonitorResultsEvent`, `WebhookEvent` and more. The raw
 `paths`, `components` and `operations` types are exported as well.

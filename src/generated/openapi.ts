@@ -335,6 +335,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/chatgpt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask ChatGPT as a logged-out user and get its answer, cited sources, products and places (5 credits)
+         * @description Opens chatgpt.com as a logged-out visitor in a standard Chrome behind our
+         *     proxies, sends `prompt` and returns the answer. With `web_search` (default
+         *     true) ChatGPT searches the web; `false` lets it decide. ChatGPT localises
+         *     prices, shops and places to where the visitor is: set `country` to ask from
+         *     an exit in that country (residential proxies), or leave it out to ask from
+         *     any of our exits. Guests get ChatGPT's default free model (`model`).
+         *     Takes 20–90 s; failed or refused answers are free.
+         */
+        post: operations["chatgpt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/gemini": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Google Gemini as a logged-out user and get its answer with the sources it grounded on (5 credits)
+         * @description Opens gemini.google.com as a logged-out visitor and sends `prompt`. Gemini
+         *     answers guests from residential and ISP exits only; grounded answers take
+         *     40–90 s. `country` asks from an exit in that country.
+         */
+        post: operations["gemini"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/copilot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Microsoft Copilot Search on Bing and get its answer, cited sources and products (3 credits)
+         * @description Microsoft Copilot Search (bing.com/copilotsearch, Bing's AI answer).
+         *     The Copilot app itself has no logged-out access. `country` and `language`
+         *     set Bing's market. Products are Bing's sponsored product cards. 15–40 s.
+         */
+        post: operations["copilot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/ai_mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Google AI Mode and get its answer, cited sources and products (3 credits)
+         * @description Google's AI Mode (`udm=50`) for `prompt`, logged out. `country` is the
+         *     country Google answers for. 10–45 s.
+         */
+        post: operations["aiMode"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/brave_ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask Brave Search's AI answer and get it with cited sources, the searches it ran and products (2 credits)
+         * @description Brave Search's AI answer ("Ask Brave") for `prompt`, logged out. `country`
+         *     sets Brave's market (prices and shops follow it). About 10 s.
+         */
+        post: operations["braveAi"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/extract": {
         parameters: {
             query?: never;
@@ -576,6 +688,13 @@ export interface paths {
          *     account (403 `forbidden`). A monitor pauses itself after 10 failed runs in a row
          *     (search errors, insufficient credits or webhook failures) or when its key is
          *     revoked; set `active: true` to resume.
+         *
+         *     With an AI assistant `endpoint` (chatgpt, gemini, copilot, ai_mode,
+         *     brave_ai) the monitor asks `prompt` every run and reports every answer
+         *     (AI visibility is tracked over time): `text`, `markdown`, `sources`,
+         *     `new_sources` (links not seen in earlier runs), `search_queries`,
+         *     `products` and, with `track`, `mentions`. Each run costs the endpoint's
+         *     price.
          */
         post: operations["createMonitor"];
         delete?: never;
@@ -1127,6 +1246,135 @@ export interface components {
             /** @description Accept a cached result up to this many seconds old (50% of credits on a hit) */
             max_age?: number;
             engine?: components["schemas"]["EngineParam"];
+        };
+        AssistantRequest: {
+            /** @description The message to the assistant */
+            prompt: string;
+            /** @description Ask from this country (ISO 3166-1 alpha-2): answers, prices and shops follow it */
+            country?: string;
+            /** @description Interface language (e.g. en, de); the answer follows the prompt's language */
+            language?: string;
+            track?: components["schemas"]["TrackList"];
+            /**
+             * @description Also return the answer page's HTML (`html`)
+             * @default false
+             */
+            include_html?: boolean;
+            /**
+             * @default json
+             * @enum {string}
+             */
+            format?: "json" | "markdown" | "compact";
+            fields?: string;
+            /** @description Accept a cached answer up to this many seconds old (half price); answers are cached for at most an hour */
+            max_age?: number;
+        };
+        ChatGPTRequest: {
+            /** @description The message to ChatGPT */
+            prompt: string;
+            /**
+             * @description Make ChatGPT search the web; false lets it decide (it then searches for about two thirds of shopping and local prompts)
+             * @default true
+             */
+            web_search?: boolean;
+            /** @description Ask from an exit in this country (ISO 3166-1 alpha-2, residential proxies). Without it any of our exits asks (mostly US and EU) */
+            country?: string;
+            track?: components["schemas"]["TrackList"];
+            /** @default false */
+            include_html?: boolean;
+            /**
+             * @default json
+             * @enum {string}
+             */
+            format?: "json" | "markdown" | "compact";
+            fields?: string;
+            max_age?: number;
+        };
+        /** @description Brands ("Acme") and domains ("acme.com", subdomains match) to check the answer for; each comes back in `mentions` */
+        TrackList: string[];
+        AISource: {
+            /** @description The number the answer cites it with ([n] in markdown) */
+            position: number;
+            title?: string;
+            link: string;
+            domain: string;
+            snippet?: string;
+            date?: string;
+            /** @description Cited inline in the answer (false: only listed beside it) */
+            cited: boolean;
+        };
+        AIProduct: {
+            position: number;
+            title: string;
+            brand?: string;
+            /** @description As shown */
+            price?: string;
+            extracted_price?: number;
+            /** @description ISO 4217 when the symbol is unambiguous */
+            currency?: string;
+            rating?: number;
+            reviews?: number;
+            merchant?: string;
+            link?: string;
+            image?: string;
+            description?: string;
+            /** @description A paid placement (an ad card shown with the answer) */
+            sponsored?: boolean;
+        };
+        Mention: {
+            term: string;
+            /** @description The answer text names it (a domain: names the domain) */
+            mentioned: boolean;
+            /** @description A cited source matches it */
+            cited: boolean;
+            /** @description Positions of the matching sources */
+            sources: number[];
+            /** @description Positions of the matching products */
+            products?: number[];
+            /** @description Where the text first names it, 0 (start) to 1 (end); -1 when it doesn't */
+            text_position: number;
+        };
+        /** @description The normalised request of an AI assistant endpoint (the path names the assistant, so there is no engine) */
+        AssistantEcho: {
+            /**
+             * @example chatgpt
+             * @example gemini
+             */
+            endpoint: string;
+            prompt: string;
+            country?: string;
+            /** @description Not on chatgpt */
+            language?: string;
+            /** @description chatgpt only */
+            web_search?: boolean;
+            include_html?: boolean;
+        };
+        AssistantResponse: {
+            request: components["schemas"]["AssistantEcho"];
+            /** @description The answer as plain text */
+            text: string;
+            /** @description The answer as Markdown, citations as [n](link) matching sources[].position */
+            markdown: string;
+            /** @description Only with include_html=true */
+            html?: string;
+            /** @description The model the assistant reports, when it does (e.g. ChatGPT's guest model) */
+            model?: string;
+            sources: components["schemas"]["AISource"][];
+            /** @description The searches the assistant ran (fan-out) where it shows them */
+            search_queries: string[];
+            products: components["schemas"]["AIProduct"][];
+            /** @description Local businesses the answer showed */
+            places?: components["schemas"]["PlaceResult"][];
+            related_questions?: string[];
+            /** @description With track only */
+            mentions?: components["schemas"]["Mention"][];
+            meta: components["schemas"]["Meta"];
+        };
+        AIOverview: {
+            text: string;
+            /** @description Citations as [n](link) matching sources[].position */
+            markdown: string;
+            sources: components["schemas"]["AISource"][];
         };
         WebpageRequest: {
             /**
@@ -1735,6 +1983,7 @@ export interface components {
              * @example search
              * @example news
              * @example webpage
+             * @example chatgpt
              */
             endpoint: string;
             /** @description The engine policy as asked (google, auto, one provider or a list) */
@@ -1766,6 +2015,11 @@ export interface components {
             boost_domains?: string[];
             highlights?: boolean;
             include_answer?: boolean;
+            /** @description AI assistant endpoints */
+            prompt?: string;
+            /** @description /v1/chatgpt */
+            web_search?: boolean;
+            include_html?: boolean;
         } & {
             [key: string]: unknown;
         };
@@ -1849,6 +2103,8 @@ export interface components {
             top_stories?: components["schemas"]["NewsResult"][];
             places?: components["schemas"]["PlaceResult"][];
             answer?: components["schemas"]["SearchAnswer"];
+            /** @description Google's AI Overview when the page showed one */
+            ai_overview?: components["schemas"]["AIOverview"];
             meta: components["schemas"]["Meta"];
         };
         ImageResult: {
@@ -2195,7 +2451,7 @@ export interface components {
         };
         BatchCreateRequest: {
             /** @enum {string} */
-            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "place" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "webpage";
+            endpoint: "search" | "images" | "videos" | "news" | "maps" | "places" | "place" | "reviews" | "shopping" | "scholar" | "patents" | "autocomplete" | "webpage" | "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
             /** @description Request bodies for `endpoint` (same fields as the realtime endpoint) */
             requests: {
                 [key: string]: unknown;
@@ -2277,10 +2533,15 @@ export interface components {
                 message?: string;
             };
         };
-        /** @description The saved request a monitor reruns: a search (q and options) or, for webpage monitors, url (and country) */
+        /** @description The saved request a monitor reruns: a search (q and options), for webpage monitors url (and country), or for AI assistant monitors prompt (with country, language, web_search and track) */
         MonitorSearch: {
             q?: string;
             url?: string;
+            /** @description AI assistant monitors */
+            prompt?: string;
+            /** @description endpoint=chatgpt */
+            web_search?: boolean;
+            track?: string[];
             country?: string;
             language?: string;
             location?: string;
@@ -2293,7 +2554,7 @@ export interface components {
             exclude_domains?: string[];
             engine?: string[];
         };
-        /** @description Search and news monitors need `q`; webpage monitors need `url` and take only `country` besides */
+        /** @description Search and news monitors need `q`; webpage monitors need `url` and take only `country` besides; AI assistant monitors need `prompt` and take `country`, `language` (not chatgpt), `web_search` (chatgpt) and `track` */
         MonitorCreateRequest: {
             q?: string;
             /**
@@ -2301,11 +2562,16 @@ export interface components {
              * @description endpoint=webpage: the page to watch for content changes
              */
             url?: string;
+            /** @description AI assistant monitors: the prompt asked every run */
+            prompt?: string;
+            /** @description endpoint=chatgpt */
+            web_search?: boolean;
+            track?: components["schemas"]["TrackList"];
             /**
              * @default search
              * @enum {string}
              */
-            endpoint?: "search" | "news" | "webpage";
+            endpoint?: "search" | "news" | "webpage" | "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
             /** @description Your own JSON object (at most 2 KB), echoed on the monitor and in its webhooks */
             metadata?: {
                 [key: string]: unknown;
@@ -2357,11 +2623,14 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
-             * @description Switching between a search and a page drops the other kind's fields
+             * @description Switching between a search, a page and an AI prompt drops the other kinds' fields
              * @enum {string}
              */
-            endpoint?: "search" | "news" | "webpage";
+            endpoint?: "search" | "news" | "webpage" | "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
             q?: string;
+            prompt?: string;
+            web_search?: boolean;
+            track?: components["schemas"]["TrackList"];
             /**
              * Format: uri
              * @description endpoint=webpage only
@@ -2386,7 +2655,7 @@ export interface components {
             id: string;
             name: string;
             /** @enum {string} */
-            endpoint: "search" | "news" | "webpage";
+            endpoint: "search" | "news" | "webpage" | "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
             request: components["schemas"]["MonitorSearch"];
             metadata?: {
                 [key: string]: unknown;
@@ -2419,7 +2688,7 @@ export interface components {
             status: "ok" | "error" | "webhook_failed" | "paused";
             error?: string | null;
             new_results: number;
-            /** @description The new results (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage); null when there were none or after 24 hours */
+            /** @description The new results (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage, one MonitorAnswer per run for AI assistants); null when there were none or after 24 hours */
             results?: {
                 [key: string]: unknown;
             }[] | null;
@@ -2445,6 +2714,19 @@ export interface components {
             markdown: string;
             published_at?: string;
         };
+        /** @description What an AI assistant monitor reports every run (one item per run) */
+        MonitorAnswer: {
+            text: string;
+            markdown: string;
+            model?: string;
+            sources: components["schemas"]["AISource"][];
+            /** @description Links of the sources not seen in earlier runs */
+            new_sources: string[];
+            search_queries: string[];
+            products?: components["schemas"]["AIProduct"][];
+            /** @description With track only */
+            mentions?: components["schemas"]["Mention"][];
+        };
         MonitorRunList: {
             results: components["schemas"]["MonitorRun"][];
             /**
@@ -2469,11 +2751,13 @@ export interface components {
             run_id: string;
             name: string;
             /** @enum {string} */
-            endpoint: "search" | "news" | "webpage";
-            /** @description The saved query (empty for webpage monitors) */
-            q: string;
+            endpoint: "search" | "news" | "webpage" | "chatgpt" | "gemini" | "copilot" | "ai_mode" | "brave_ai";
+            /** @description The saved query (empty for webpage monitors */
+            q?: string;
             /** @description webpage monitors only */
             url?: string;
+            /** @description AI assistant monitors only (instead of q) */
+            prompt?: string;
             /** @description The monitor's metadata */
             metadata?: {
                 [key: string]: unknown;
@@ -2482,7 +2766,7 @@ export interface components {
             first_run: boolean;
             /** Format: date-time */
             run_at: string;
-            /** @description Results not seen in earlier runs (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage) */
+            /** @description Results not seen in earlier runs (OrganicResult-shaped for search, NewsResult for news, MonitorPageChange for webpage); for AI assistant monitors the run's answer (one MonitorAnswer, sent every run) */
             new_results: {
                 [key: string]: unknown;
             }[];
@@ -2820,6 +3104,22 @@ export interface components {
             };
         };
         /** @description OK (text/markdown when format=markdown) */
+        AssistantOK: {
+            headers: {
+                "X-Credits-Used": components["headers"]["CreditsUsed"];
+                "X-Credits-Remaining": components["headers"]["CreditsRemaining"];
+                "X-Cost-USD": components["headers"]["CostUSD"];
+                "X-Cache": components["headers"]["Cache"];
+                "X-Latency-Ms": components["headers"]["LatencyMs"];
+                "X-Tokens-Estimate": components["headers"]["TokensEstimate"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["AssistantResponse"];
+                "text/markdown": string;
+            };
+        };
+        /** @description OK (text/markdown when format=markdown) */
         WebpageOK: {
             headers: {
                 "X-Credits-Used": components["headers"]["CreditsUsed"];
@@ -3148,6 +3448,146 @@ export interface operations {
         };
         responses: {
             200: components["responses"]["WebpageOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    chatgpt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "prompt": "What are the best CRMs for a 10-person startup?",
+                 *       "track": [
+                 *         "hubspot.com",
+                 *         "Pipedrive"
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["ChatGPTRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AssistantOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    gemini: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "prompt": "How do heat pumps work in cold climates?"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AssistantOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    copilot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "prompt": "best mattress for side sleepers",
+                 *       "country": "us"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AssistantOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    aiMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "prompt": "how to remove a red wine stain from a wool carpet"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AssistantOK"];
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            402: components["responses"]["Error"];
+            403: components["responses"]["Error"];
+            429: components["responses"]["Error"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    braveAi: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "prompt": "best budget noise cancelling headphones under $100"
+                 *     }
+                 */
+                "application/json": components["schemas"]["AssistantRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["AssistantOK"];
             400: components["responses"]["Error"];
             401: components["responses"]["Error"];
             402: components["responses"]["Error"];
