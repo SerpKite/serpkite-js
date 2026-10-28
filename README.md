@@ -186,7 +186,7 @@ for (const r of res.results) console.log(r.position, r.published_at, r.highlight
 ## Search engines & fallback
 
 By default every request is answered by Google only (`engine: "google"`); SerpKite already
-fails over across its own proxy pools. Opt in to other providers with `engine`:
+retries Google internally. Opt in to other providers with `engine`:
 
 ```ts
 // Fall back to other enabled providers when Google is blocked or times out
