@@ -1047,7 +1047,7 @@ export interface components {
         Error: {
             error: {
                 /**
-                 * @description 403: spend_cap_reached, key_limit_reached, forbidden. 409/422: idempotency_key_reused. 429: rate_limited, daily_limit_reached. 503: upstream_error, upstream_blocked, upstream_timeout, unavailable (the API never sends 502 or 504)
+                 * @description 403: spend_cap_reached, key_limit_reached, account_restricted, forbidden. 409/422: idempotency_key_reused. 429: rate_limited, daily_limit_reached. 503: upstream_error, upstream_blocked, upstream_timeout, unavailable (the API never sends 502 or 504)
                  * @example unauthorized
                  * @example invalid_request
                  * @example insufficient_credits
@@ -1055,6 +1055,7 @@ export interface components {
                  * @example daily_limit_reached
                  * @example spend_cap_reached
                  * @example key_limit_reached
+                 * @example account_restricted
                  * @example idempotency_key_reused
                  * @example forbidden
                  * @example not_found
