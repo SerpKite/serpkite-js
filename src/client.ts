@@ -48,7 +48,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.8.1";
+export const VERSION = "0.8.2";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -224,14 +224,14 @@ export class SerpKite {
    * Ask ChatGPT as a logged-out user: the answer (`text`, `markdown`), cited `sources`,
    * `search_queries`, `products`, `places` and the guest `model`. `web_search` (default true)
    * makes it search the web; `country` asks from an exit in that country. `track` returns
-   * `mentions` of your brands and domains. 5 credits.
+   * `mentions` of your brands and domains. 4 credits.
    */
   readonly chatgpt = this.#assistant<ChatGPTParams>("/v1/chatgpt");
-  /** Ask Google Gemini as a logged-out user: the answer with the sources it grounded on. 5 credits. */
+  /** Ask Google Gemini as a logged-out user: the answer with the sources it grounded on. 3 credits. */
   readonly gemini = this.#assistant<AssistantParams>("/v1/gemini");
   /** Microsoft Copilot Search on Bing: the answer, cited sources and products. 3 credits. */
   readonly copilot = this.#assistant<AssistantParams>("/v1/copilot");
-  /** Google AI Mode: the answer, cited sources and products. 3 credits. */
+  /** Google AI Mode: the answer, cited sources and products. 2 credits. */
   readonly aiMode = this.#assistant<AssistantParams>("/v1/ai_mode");
   /** Brave Search's AI answer: cited sources, the searches it ran and products. 2 credits. */
   readonly braveAi = this.#assistant<AssistantParams>("/v1/brave_ai");

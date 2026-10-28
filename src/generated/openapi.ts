@@ -345,7 +345,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask ChatGPT as a logged-out user and get its answer, cited sources, products and places (5 credits)
+         * Ask ChatGPT as a logged-out user and get its answer, cited sources, products and places (4 credits)
          * @description Opens chatgpt.com as a logged-out visitor in a standard browser, sends
          *     `prompt` and returns the answer. With `web_search` (default true) ChatGPT
          *     searches the web; `false` lets it decide. ChatGPT localises prices, shops
@@ -370,7 +370,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask Google Gemini as a logged-out user and get its answer with the sources it grounded on (5 credits)
+         * Ask Google Gemini as a logged-out user and get its answer with the sources it grounded on (3 credits)
          * @description Opens gemini.google.com as a logged-out visitor and sends `prompt`. Most
          *     answers take 5–30 s; answers that search the web take longer. `country`
          *     asks as a visitor in that country.
@@ -414,7 +414,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ask Google AI Mode and get its answer, cited sources and products (3 credits)
+         * Ask Google AI Mode and get its answer, cited sources and products (2 credits)
          * @description Google's AI Mode (`udm=50`) for `prompt`, logged out. `country` is the
          *     country Google answers for. 10–45 s.
          */

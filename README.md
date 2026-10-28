@@ -277,7 +277,7 @@ const serp = await sk.search({ q: "how do heat pumps work" });
 console.log(serp.ai_overview?.text, serp.ai_overview?.sources);
 ```
 
-- Prices per answer: ChatGPT 5, Gemini 5, Copilot 3, AI Mode 3, Brave AI 2 credits (the same in
+- Prices per answer: ChatGPT 4, Gemini 3, Copilot 3, AI Mode 2, Brave AI 2 credits (the same in
   batches; `max_age` cache hits half). Failed, refused and empty answers are free.
 - Answers take 10-90 s: these methods wait at least `ASSISTANT_TIMEOUT_MS` (120 s) per attempt
   unless you pass `timeoutMs`, and are retried only on `429` (a lost response is still billed).
