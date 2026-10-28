@@ -346,13 +346,12 @@ export interface paths {
         put?: never;
         /**
          * Ask ChatGPT as a logged-out user and get its answer, cited sources, products and places (5 credits)
-         * @description Opens chatgpt.com as a logged-out visitor in a standard Chrome behind our
-         *     proxies, sends `prompt` and returns the answer. With `web_search` (default
-         *     true) ChatGPT searches the web; `false` lets it decide. ChatGPT localises
-         *     prices, shops and places to where the visitor is: set `country` to ask from
-         *     an exit in that country (residential proxies), or leave it out to ask from
-         *     any of our exits. Guests get ChatGPT's default free model (`model`).
-         *     Takes 20–90 s; failed or refused answers are free.
+         * @description Opens chatgpt.com as a logged-out visitor in a standard browser, sends
+         *     `prompt` and returns the answer. With `web_search` (default true) ChatGPT
+         *     searches the web; `false` lets it decide. ChatGPT localises prices, shops
+         *     and places to where the visitor is: set `country` to ask as a visitor in
+         *     that country. Guests get ChatGPT's default free model (`model`).
+         *     Usually takes 10–30 s; failed or refused answers are free.
          */
         post: operations["chatgpt"];
         delete?: never;
@@ -372,9 +371,9 @@ export interface paths {
         put?: never;
         /**
          * Ask Google Gemini as a logged-out user and get its answer with the sources it grounded on (5 credits)
-         * @description Opens gemini.google.com as a logged-out visitor and sends `prompt`. Gemini
-         *     answers guests from residential and ISP exits only; grounded answers take
-         *     40–90 s. `country` asks from an exit in that country.
+         * @description Opens gemini.google.com as a logged-out visitor and sends `prompt`. Most
+         *     answers take 5–30 s; answers that search the web take longer. `country`
+         *     asks as a visitor in that country.
          */
         post: operations["gemini"];
         delete?: never;
@@ -1278,7 +1277,7 @@ export interface components {
              * @default true
              */
             web_search?: boolean;
-            /** @description Ask from an exit in this country (ISO 3166-1 alpha-2, residential proxies). Without it any of our exits asks (mostly US and EU) */
+            /** @description Ask as a visitor in this country (ISO 3166-1 alpha-2). Without it the visitor is usually in the US or EU */
             country?: string;
             track?: components["schemas"]["TrackList"];
             /** @default false */
