@@ -1177,6 +1177,11 @@ export interface components {
              */
             end_date?: string;
             /**
+             * @description Shopping only: `image_url` is a `data:` thumbnail (5-20 KB) on the cards where Google inlines one instead of an image URL, usually the first of a page. Off by default, because it adds up to a few hundred KB to a response
+             * @default false
+             */
+            include_images?: boolean;
+            /**
              * @description Return up to 3 query-ranked passages (`highlights`) of each page read by include_content instead of the whole page (search only; needs include_content; no extra credits)
              * @default false
              */
