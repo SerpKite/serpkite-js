@@ -437,7 +437,9 @@ export interface paths {
         /**
          * Ask Brave Search's AI answer and get it with cited sources, the searches it ran and products (2 credits)
          * @description Brave Search's AI answer ("Ask Brave") for `prompt`, logged out. `country`
-         *     sets Brave's market (prices and shops follow it). About 10 s.
+         *     sets Brave's market (prices and shops follow it). About 10 s. Brave doesn't
+         *     answer every query: then `text` is empty, `meta.parse_quality` is `empty` and
+         *     the request costs nothing.
          */
         post: operations["braveAi"];
         delete?: never;
@@ -796,7 +798,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Position of a domain for a keyword in the top N (default 100; priced like /v1/search depth, 7 credits for 100) */
+        /**
+         * Position of a domain for a keyword in the top N (default 100; priced like /v1/search depth, 7 credits for 100)
+         * @description Reads the same results as `/v1/search` with that `num`. Google serves several variants of
+         *     one results page, so a position can differ between calls, and a domain can be absent from
+         *     one variant: `position: null` means absent from this page, not from Google. Average several
+         *     checks to track a rank.
+         */
         post: operations["rank"];
         delete?: never;
         options?: never;
@@ -1046,7 +1054,7 @@ export interface components {
         Error: {
             error: {
                 /**
-                 * @description 403: spend_cap_reached, key_limit_reached, account_restricted, forbidden. 409/422: idempotency_key_reused. 429: rate_limited, daily_limit_reached. 503: upstream_error, upstream_blocked, upstream_timeout, unavailable (the API never sends 502 or 504)
+                 * @description 403: spend_cap_reached, key_limit_reached, account_restricted, forbidden. 409/422: idempotency_key_reused. 422: target_unavailable (the URL you asked for failed: its site answered 404, its domain doesn't resolve; resending won't help), no_pages. 429: rate_limited, daily_limit_reached. 503: upstream_error, upstream_blocked, upstream_timeout, unavailable (the API never sends 502 or 504)
                  * @example unauthorized
                  * @example invalid_request
                  * @example insufficient_credits
@@ -1100,14 +1108,14 @@ export interface components {
              * @default en
              */
             language?: string;
-            /** @description Free-text location, e.g. "Austin, Texas, United States" */
+            /** @description Free-text location, e.g. "Austin, Texas, United States". Google and Yandex Maps apply it; other engines have no such parameter and are skipped (a 400 when you named one), never answered for the wrong place. uule works the same way */
             location?: string;
             /** @description Pre-encoded Google location (overrides ll and location; percent-encoded values are decoded) */
             uule?: string;
             /** @description Map point "@lat,lng,14z" (maps and places only; zoom optional, default 14z): the map is searched around that point at that zoom, wherever the request comes from. Overrides location */
             ll?: string;
             /**
-             * @description 1–100. Up to 10 returns one page (10 results, 1 credit; trim it yourself for fewer). Above 10 on search and news is the depth bundle (7 credits for 100; values between round up to whole pages). On images a page is a block of up to 100 images (1 credit) and num (default 100) is how many of them to return; `page` moves to the next block. Other verticals return one page of 10
+             * @description 1–100. Up to 10 returns one page (10 results, 1 credit; trim it yourself for fewer). Above 10 on search and news is the depth bundle (7 credits for 100; values between round up to whole pages). On images a page is a block of up to 100 images (1 credit) and num (default 100) is how many of them to return; `page` moves to the next block. Other verticals return one page as the engine serves it: up to 10 on Google (shopping cards come 40-55 to a page, and Brave and DuckDuckGo news and videos up to about 60), for 1 credit. Trim it yourself
              * @default 10
              */
             num?: number;
@@ -1202,7 +1210,7 @@ export interface components {
              * @enum {string}
              */
             sort?: "most_relevant" | "newest" | "highest_rating" | "lowest_rating";
-            /** @description `next_page_token` from the previous page, unchanged. Opaque and bound to the place and `sort` it was issued for (anything else is a 400). Paging reaches the first 10 reviews of a place, all Google Maps shows a logged-out visitor. */
+            /** @description `next_page_token` from the previous page, unchanged. Opaque and bound to the place and `sort` it was issued for (anything else is a 400). Paging reaches the first 10 reviews of a place at most, and usually the first 5, all Google Maps shows a logged-out visitor. */
             page_token?: string;
             /**
              * @description Reviews per page; a page holds at most 10 (the first 10 reviews of a place). A page can be shorter when Google stops loading early; `next_page_token` then resumes after it
@@ -2267,6 +2275,7 @@ export interface components {
             position: number;
             title: string;
             source?: string;
+            /** @description The merchant page when Google's card links to it; most cards don't, and then this is Google's product viewer or shopping page for the item */
             link?: string;
             price?: string;
             price_value?: number;
@@ -3041,7 +3050,7 @@ export interface components {
                  *         {
                  *           "url": "https://example.com/missing",
                  *           "error": {
-                 *             "code": "upstream_error",
+                 *             "code": "target_unavailable",
                  *             "message": "could not fetch the page: the site answered 404; you were not charged"
                  *           }
                  *         }
@@ -3452,6 +3461,7 @@ export interface operations {
             401: components["responses"]["Error"];
             402: components["responses"]["Error"];
             403: components["responses"]["Error"];
+            422: components["responses"]["Error"];
             429: components["responses"]["Error"];
             503: components["responses"]["Unavailable"];
         };
