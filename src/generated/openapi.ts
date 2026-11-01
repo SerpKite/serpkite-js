@@ -1955,8 +1955,13 @@ export interface components {
             /** Format: date-time */
             cached_at?: string;
             resolved_urls?: boolean;
-            /** @enum {string} */
+            /**
+             * @description `partial` means some results were dropped or, on a `num` above 10, that pages are listed in `missing_pages`.
+             * @enum {string}
+             */
             parse_quality?: "ok" | "partial" | "empty";
+            /** @description Pages of a `num` above 10 that could not be retrieved, for example because Google refused them. Absent when every page was retrieved or Google ended the results, so a short result without this field is all Google returned. The pages are not billed, and positions after a missing middle page are shifted. */
+            missing_pages?: number[];
             latency_ms?: number;
             llm?: components["schemas"]["LLMUsage"];
             /** @description Non-fatal problems, e.g. an include_answer that failed (and was refunded) */
