@@ -1962,6 +1962,8 @@ export interface components {
             parse_quality?: "ok" | "partial" | "empty";
             /** @description Pages of a `num` above 10 that could not be retrieved, for example because Google refused them. Absent when every page was retrieved or Google ended the results, so a short result without this field is all Google returned. The pages are not billed, and positions after a missing middle page are shifted. */
             missing_pages?: number[];
+            /** @description Present and `true` when Google said it hid results very similar to those shown and ended the results early. Nothing was lost in collection, but Google's answer for this query can differ between requests, so a later request may return more. Such a result is not cached. */
+            similar_results_hidden?: boolean;
             latency_ms?: number;
             llm?: components["schemas"]["LLMUsage"];
             /** @description Non-fatal problems, e.g. an include_answer that failed (and was refunded) */
