@@ -416,7 +416,8 @@ export interface paths {
         /**
          * Ask Google AI Mode and get its answer, cited sources and products (2 credits)
          * @description Google's AI Mode (`udm=50`) for `prompt`, logged out. `country` is the
-         *     country Google answers for. 10–45 s.
+         *     country Google answers for; `location` (or `uule`) the place, so
+         *     "near me" prompts answer for that city. 10–45 s.
          */
         post: operations["aiMode"];
         delete?: never;
@@ -437,7 +438,8 @@ export interface paths {
         /**
          * Ask Brave Search's AI answer and get it with cited sources, the searches it ran and products (2 credits)
          * @description Brave Search's AI answer ("Ask Brave") for `prompt`, logged out. `country`
-         *     sets Brave's market (prices and shops follow it). About 10 s. Brave doesn't
+         *     sets Brave's market (prices and shops follow it); `location` (or `uule`)
+         *     the place local answers are for. About 10 s. Brave doesn't
          *     answer every query: then `text` is empty, `meta.parse_quality` is `empty` and
          *     the request costs nothing.
          */
@@ -1293,6 +1295,10 @@ export interface components {
             country?: string;
             /** @description Interface language (e.g. en, de); the answer follows the prompt's language */
             language?: string;
+            /** @description ai_mode and brave_ai only (400 on gemini and copilot): the place the answer is for, e.g. "Austin, Texas, United States", so local prompts ("best pizza near me") answer for it. country defaults to its country. A place the assistant can't find is a 400 (free), never answered for another place */
+            location?: string;
+            /** @description ai_mode and brave_ai only: Google's encoded location, used like location */
+            uule?: string;
             track?: components["schemas"]["TrackList"];
             /**
              * @description Also return the answer page's HTML (`html`)
@@ -1384,6 +1390,10 @@ export interface components {
             country?: string;
             /** @description Not on chatgpt */
             language?: string;
+            /** @description ai_mode and brave_ai only */
+            location?: string;
+            /** @description ai_mode and brave_ai only */
+            uule?: string;
             /** @description chatgpt only */
             web_search?: boolean;
             include_html?: boolean;
@@ -1657,6 +1667,8 @@ export interface components {
             };
             country?: string;
             language?: string;
+            /** @description Place the searches are for, e.g. "Austin, Texas, United States" (as on /v1/search) */
+            location?: string;
             include_domains?: string[];
             exclude_domains?: string[];
             /**
@@ -2615,7 +2627,7 @@ export interface components {
                 message?: string;
             };
         };
-        /** @description The saved request a monitor reruns: a search (q and options), for webpage monitors url (and country), or for AI assistant monitors prompt (with country, language, web_search and track) */
+        /** @description The saved request a monitor reruns: a search (q and options), for webpage monitors url (and country), or for AI assistant monitors prompt (with country, language, location on ai_mode and brave_ai, web_search and track) */
         MonitorSearch: {
             q?: string;
             url?: string;
@@ -2636,7 +2648,7 @@ export interface components {
             exclude_domains?: string[];
             engine?: string[];
         };
-        /** @description Search and news monitors need `q`; webpage monitors need `url` and take only `country` besides; AI assistant monitors need `prompt` and take `country`, `language` (not chatgpt), `web_search` (chatgpt) and `track` */
+        /** @description Search and news monitors need `q`; webpage monitors need `url` and take only `country` besides; AI assistant monitors need `prompt` and take `country`, `language` (not chatgpt), `location` (ai_mode, brave_ai), `web_search` (chatgpt) and `track` */
         MonitorCreateRequest: {
             q?: string;
             /**
