@@ -140,6 +140,8 @@ export type PatentsResponse = Schemas["PatentsResponse"];
 export type AutocompleteResponse = Schemas["AutocompleteResponse"];
 export type WebpageResponse = Schemas["WebpageResponse"];
 export type RankResponse = Schemas["RankResponse"];
+export type ResolveResponse = Schemas["ResolveResponse"];
+export type ResolvedLink = Schemas["ResolvedLink"];
 export type MapResponse = Schemas["MapResponse"];
 export type ExtractResponse = Schemas["ExtractResponse"];
 /**

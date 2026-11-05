@@ -35,6 +35,7 @@ import type {
   RankResponse,
   ResearchParams,
   ResearchTask,
+  ResolveResponse,
   ReviewsParams,
   ReviewsResponse,
   ScholarResponse,
@@ -48,7 +49,7 @@ import type {
   WebpageResponse,
 } from "./types";
 
-export const VERSION = "0.8.2";
+export const VERSION = "0.9.0";
 export const DEFAULT_BASE_URL = "https://api.serpkite.com";
 
 export interface SerpKiteOptions {
@@ -239,6 +240,15 @@ export class SerpKite {
   /** Position of `domain` for keyword `q` in the top `num` results (default 100). */
   rank(params: RankParams, options?: RequestOptions): Promise<RankResponse> {
     return this.request({ method: "POST", path: "/v1/rank", body: params, options });
+  }
+
+  /**
+   * Destinations of results returned with `link_resolved: false` (their `link` is still Google's
+   * /goto redirect). Pass those links (up to 100); a `pending` one has `retry_after` seconds to
+   * wait. Free.
+   */
+  resolve(links: string[], options?: RequestOptions): Promise<ResolveResponse> {
+    return this.request({ method: "POST", path: "/v1/resolve", body: { links }, options });
   }
 
   /**

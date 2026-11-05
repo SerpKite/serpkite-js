@@ -97,6 +97,7 @@ vertical-specific extras and `meta` (`request_id`, `credits_used`, `cached`, `la
 | `chatgpt(params)` | `POST /v1/chatgpt` | `ChatGPTParams` (`prompt`, `web_search`, `country`, `track`, `include_html`) | `AssistantResponse` |
 | `gemini` / `copilot` / `aiMode` / `braveAi(params)` | `POST /v1/gemini` / `copilot` / `ai_mode` / `brave_ai` | `AssistantParams` (`prompt`, `country`, `language`, `track`, `include_html`) | `AssistantResponse` (`text`, `markdown`, `sources`, `search_queries`, `products`, `places`, `mentions`) |
 | `rank(params)` | `POST /v1/rank` | `RankParams` (`q`, `domain`, `num`: 10\|20\|30\|50\|100) | `RankResponse` (`position` or `null`, `matches`, `checked`) |
+| `resolve(links)` | `POST /v1/resolve` | `string[]`: `link` values of results with `link_resolved: false` | `ResolveResponse` (`results[].status`/`destination`, `retry_after`; free) |
 | `answer(params)` | `POST /v1/answer` | `AnswerParams` (`q`, `depth`: `fast`\|`standard`, `num_sources` 1-5, `output_schema`, search options) | `AnswerResponse` (`answer`, `citations`, `results`, `output`) |
 | `answerStream(params)` | `POST /v1/answer` (`stream: true`) | `AnswerParams` | `AsyncIterable<AnswerStreamEvent>` (`results`, `delta`…, `done`) |
 | `extract(params)` | `POST /v1/extract` | `ExtractParams` (`urls` ≤ 20, `format`, `query`, `highlights`, `summary`, `output_schema`, `prompt`, …) | `ExtractResponse` (`results`, `failed`) |
@@ -508,7 +509,7 @@ Types are generated from the OpenAPI contract (`backend/api/serp-api.yaml`) with
 `OrganicResult`, `AnswerBox`, `NewsResponse`, `NewsResult`, `ImagesResponse`, `PlacesResponse`,
 `PlaceParams`, `PlaceResult`, `WeeklyHours`, `HoursInterval`, `PlacePhoto`, `ReviewsResponse`,
 `ShoppingResponse`, `ScholarResponse`, `PatentsResponse`, `AutocompleteResponse`, `WebpageResponse`,
-`RankResponse`,
+`RankResponse`, `ResolveResponse`, `ResolvedLink`,
 `Account`, `Batch`, `BatchCreateParams`, `Meta`, `Engine`, `Provider`, `RouteStep`,
 `CompactResponse`, `MapResponse`, `ExtractResponse`, `CrawlParams`, `CrawlTask`, `CrawlResult`,
 `TaskCreated`, `AnswerParams`, `AnswerResponse`, `AnswerStreamEvent`, `Citation`, `SearchAnswer`,

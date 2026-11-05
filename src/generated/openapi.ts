@@ -812,6 +812,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/resolve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Destinations of Google /goto links a response returned with `link_resolved false`. Free
+         * @description Google sometimes holds back where a result leads for longer than a request lasts. Such a
+         *     result comes back with `link_resolved: false` and Google's `https://www.google.com/goto?url=…`
+         *     redirect as its `link`. SerpKite goes on following that redirect for up to 2 minutes after
+         *     Google's delay (usually 5-30 s). Send the links here to get their destinations. A `pending`
+         *     link has `retry_after` seconds to wait. Only links SerpKite returned in the last 24 hours are
+         *     known; anything else is `unknown`. Batch jobs and monitor runs already wait for these links
+         *     themselves. Not billed; counts toward the rate limit.
+         */
+        post: operations["resolve"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/status": {
         parameters: {
             query?: never;
@@ -1964,7 +1990,7 @@ export interface components {
             missing_pages?: number[];
             /** @description Present and `true` when Google said it hid results very similar to those shown and ended the results early. Nothing was lost in collection, but Google's answer for this query can differ between requests, so a later request may return more. Such a result is not cached. */
             similar_results_hidden?: boolean;
-            /** @description How many results carry `link_resolved: false` (their `link` is still a Google /goto redirect). Absent when every link is a destination. Such a response is not cached, so a later request may get every destination. */
+            /** @description How many results carry `link_resolved: false` (their `link` is still a Google /goto redirect). Absent when every link is a destination. SerpKite keeps following them after Google's delay: `POST /v1/resolve` returns their destinations, and the response is cached only once all of them resolve. Batch jobs and monitor runs wait for them (up to 2 minutes), so they rarely carry any. */
             unresolved_links?: number;
             latency_ms?: number;
             llm?: components["schemas"]["LLMUsage"];
@@ -2050,6 +2076,33 @@ export interface components {
             link: string;
             snippet?: string;
         };
+        ResolveRequest: {
+            /** @description `link` values of results with `link_resolved: false`, as returned */
+            links: string[];
+        };
+        ResolvedLink: {
+            /** @description The link as sent */
+            link: string;
+            /**
+             * @description `resolved`: `destination` is where it leads. `pending`: still waiting for Google; ask again after `retry_after`. `failed`: Google never released it. `unknown`: not a link SerpKite returned in the last 24 hours.
+             * @enum {string}
+             */
+            status: "resolved" | "pending" | "failed" | "unknown";
+            /** @description The destination URL (`resolved` only) */
+            destination?: string;
+            /** @description Canonical host of `destination` without www. (`resolved` only) */
+            domain?: string;
+        };
+        ResolveResponse: {
+            results: components["schemas"]["ResolvedLink"][];
+            /** @description Seconds to wait before asking again for the `pending` links (absent when none is pending) */
+            retry_after?: number;
+            meta: {
+                request_id: string;
+                /** @description Always 0 */
+                credits_used: number;
+            };
+        };
         OrganicResult: {
             position: number;
             title: string;
@@ -2057,7 +2110,7 @@ export interface components {
             link: string;
             /** @description Canonical host without www. */
             domain: string;
-            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). `POST /v1/resolve` returns the destination once Google releases it. Absent when `link` is the destination. */
             link_resolved?: boolean;
             displayed_link?: string;
             snippet?: string;
@@ -2160,7 +2213,7 @@ export interface components {
             date?: string;
             /** @description `date` as ISO 8601 when it parses */
             published_at?: string;
-            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). `POST /v1/resolve` returns the destination once Google releases it. Absent when `link` is the destination. */
             link_resolved?: boolean;
         };
         VideosResponse: {
@@ -2179,7 +2232,7 @@ export interface components {
             published_at?: string;
             source?: string;
             image_url?: string;
-            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). `POST /v1/resolve` returns the destination once Google releases it. Absent when `link` is the destination. */
             link_resolved?: boolean;
         };
         NewsResponse: {
@@ -4226,6 +4279,35 @@ export interface operations {
             403: components["responses"]["Error"];
             429: components["responses"]["Error"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    resolve: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResolveRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    /** @description Seconds until the pending links are expected to settle (only when some are `pending`) */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolveResponse"];
+                };
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Error"];
+            429: components["responses"]["Error"];
         };
     };
     status: {

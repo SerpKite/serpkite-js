@@ -144,6 +144,7 @@ describe("SerpKite", () => {
     await sk.rank({ q: "a", domain: "example.com", num: 50 });
     await sk.account();
     await sk.batches.get("b1");
+    await sk.resolve(["https://www.google.com/goto?url=CAES1"]);
     expect(m.seen[9].body).toEqual({ q: "двигатель", country: "ru", language: "ru" });
     expect(m.seen.map((s) => `${s.method} ${new URL(s.url).pathname}`)).toEqual([
       "POST /v1/images",
@@ -161,7 +162,9 @@ describe("SerpKite", () => {
       "POST /v1/rank",
       "GET /v1/account",
       "GET /v1/batches/b1",
+      "POST /v1/resolve",
     ]);
+    expect(m.seen[15].body).toEqual({ links: ["https://www.google.com/goto?url=CAES1"] });
     expect(m.seen[13].body).toBeUndefined();
     expect(m.seen[13].headers.get("content-type")).toBeNull();
   });
