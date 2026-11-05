@@ -1295,7 +1295,7 @@ export interface components {
             country?: string;
             /** @description Interface language (e.g. en, de); the answer follows the prompt's language */
             language?: string;
-            /** @description ai_mode and brave_ai only (400 on gemini and copilot): the place the answer is for, e.g. "Austin, Texas, United States", so local prompts ("best pizza near me") answer for it. country defaults to its country. A place the assistant can't find is a 400 (free), never answered for another place */
+            /** @description ai_mode and brave_ai only (400 on gemini and copilot): the place the answer is for, e.g. "Austin, Texas, United States", so local prompts ("best pizza near me") answer for it. country defaults to its country. Use the "City, Region, Country" form: brave_ai answers a place it can't find with a 400 (free); AI Mode answers for our exit's area when Google doesn't know the name */
             location?: string;
             /** @description ai_mode and brave_ai only: Google's encoded location, used like location */
             uule?: string;
