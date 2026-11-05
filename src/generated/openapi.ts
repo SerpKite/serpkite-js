@@ -1956,7 +1956,7 @@ export interface components {
             cached_at?: string;
             resolved_urls?: boolean;
             /**
-             * @description `partial` means some results were dropped or, on a `num` above 10, that pages are listed in `missing_pages`.
+             * @description `partial` means some results were dropped or, on a `num` above 10, that pages are listed in `missing_pages`. A result whose link Google did not release in time is kept (see `unresolved_links`) and does not make the response `partial`.
              * @enum {string}
              */
             parse_quality?: "ok" | "partial" | "empty";
@@ -1964,6 +1964,8 @@ export interface components {
             missing_pages?: number[];
             /** @description Present and `true` when Google said it hid results very similar to those shown and ended the results early. Nothing was lost in collection, but Google's answer for this query can differ between requests, so a later request may return more. Such a result is not cached. */
             similar_results_hidden?: boolean;
+            /** @description How many results carry `link_resolved: false` (their `link` is still a Google /goto redirect). Absent when every link is a destination. Such a response is not cached, so a later request may get every destination. */
+            unresolved_links?: number;
             latency_ms?: number;
             llm?: components["schemas"]["LLMUsage"];
             /** @description Non-fatal problems, e.g. an include_answer that failed (and was refunded) */
@@ -2051,10 +2053,12 @@ export interface components {
         OrganicResult: {
             position: number;
             title: string;
-            /** @description Resolved destination URL (never a google.com/url or /goto redirect) */
+            /** @description Resolved destination URL, never a google.com/url redirect. Google's /goto redirect only with `link_resolved: false` */
             link: string;
             /** @description Canonical host without www. */
             domain: string;
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            link_resolved?: boolean;
             displayed_link?: string;
             snippet?: string;
             date?: string;
@@ -2156,6 +2160,8 @@ export interface components {
             date?: string;
             /** @description `date` as ISO 8601 when it parses */
             published_at?: string;
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            link_resolved?: boolean;
         };
         VideosResponse: {
             request: components["schemas"]["RequestEcho"];
@@ -2173,6 +2179,8 @@ export interface components {
             published_at?: string;
             source?: string;
             image_url?: string;
+            /** @description Present and `false` only when `link` is still Google's `https://www.google.com/goto?url=…` redirect, because Google did not release the destination in time. The result keeps its position; `domain` is then the host Google displayed for it (empty when it displayed none). Absent when `link` is the destination. */
+            link_resolved?: boolean;
         };
         NewsResponse: {
             request: components["schemas"]["RequestEcho"];
