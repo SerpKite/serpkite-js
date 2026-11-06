@@ -2642,6 +2642,7 @@ export interface components {
         Account: {
             /** @description Negative after a refund of credits that were already spent; requests then get 402 insufficient_credits */
             balance: number;
+            /** @description Requests per second allowed per key (on a free account, shared by all its keys) */
             rate_limit_rps: number;
             /** @enum {string} */
             plan: "free" | "paid";
