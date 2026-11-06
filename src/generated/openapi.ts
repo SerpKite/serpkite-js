@@ -781,7 +781,19 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Google Custom Search JSON API–compatible endpoint (for apps moving off CSE) */
+        /**
+         * Google Custom Search JSON API–compatible endpoint (for apps moving off CSE)
+         * @description Takes the Custom Search JSON API's parameters and answers in its `customsearch#search` shape,
+         *     always from Google. Result indexes follow Google's pages (result `i` is on page `(i-1)/10+1`);
+         *     a `start`/`num` window that spans two pages reads both and is billed for both. Query-shaping
+         *     parameters (`exactTerms`, `excludeTerms`, `orTerms`, `hq`, `fileType`, `lowRange`/`highRange`,
+         *     `siteSearch`) become operators in Google's query, as the API documents them. Accepted and
+         *     ignored: `cx`, `c2coff`, `googlehost`, `filter`, `linkSite` (Google retired `link:`), `alt`,
+         *     `fields`, `prettyPrint`, `quotaUser`, `callback`. Errors use Google's error body
+         *     (`CSEError`), not the `/v1` one.
+         *     `GET /customsearch/v1/siterestrict` (the API's Site Restricted variant) is served by the same
+         *     handler.
+         */
         get: operations["customSearch"];
         put?: never;
         post?: never;
@@ -2463,6 +2475,41 @@ export interface components {
             image_links?: string[];
             meta: components["schemas"]["Meta"];
         };
+        /** @description Google's error body, used by /customsearch/v1 only */
+        CSEError: {
+            error: components["schemas"]["CSEErrorBody"];
+        };
+        CSEErrorBody: {
+            /** @description The HTTP status */
+            code: number;
+            message: string;
+            errors: components["schemas"]["CSEErrorItem"][];
+            /**
+             * @example INVALID_ARGUMENT
+             * @example UNAUTHENTICATED
+             * @example RESOURCE_EXHAUSTED
+             * @example UNAVAILABLE
+             */
+            status: string;
+            /** @description One google.rpc.ErrorInfo whose reason is the SerpKite error code */
+            details?: {
+                [key: string]: unknown;
+            }[];
+            request_id?: string;
+        };
+        CSEErrorItem: {
+            message?: string;
+            /** @constant */
+            domain?: "global";
+            /**
+             * @example badRequest
+             * @example keyInvalid
+             * @example quotaExceeded
+             * @example rateLimitExceeded
+             * @example backendError
+             */
+            reason?: string;
+        };
         CSEResponse: {
             /** @constant */
             kind: "customsearch#search";
@@ -2477,7 +2524,8 @@ export interface components {
                 totalResults?: string;
                 formattedTotalResults?: string;
             };
-            items: {
+            /** @description Absent when there are no results, as in the API */
+            items?: {
                 /** @constant */
                 kind?: "customsearch#result";
                 title?: string;
@@ -2494,6 +2542,13 @@ export interface components {
                 image?: {
                     [key: string]: unknown;
                 };
+                mime?: string;
+                fileFormat?: string;
+                /**
+                 * @description Present when link is still Google's /goto redirect (as on /v1/search); displayLink is then the domain Google showed. POST /v1/resolve gives the destination
+                 * @constant
+                 */
+                link_resolved?: false;
             }[];
         };
         RankRequest: {
@@ -2892,6 +2947,19 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description Google's error body (`error.code` is the HTTP status, `errors[0].reason` Google's reason,
+         *     `details[0].reason` the SerpKite error code). Not billed. A 503 carries `Retry-After`.
+         */
+        CSEError: {
+            headers: {
+                "Retry-After": components["headers"]["RetryAfter"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["CSEError"];
             };
         };
         /** @description Queued. Poll `poll_url` or wait for the webhook */
@@ -4231,15 +4299,43 @@ export interface operations {
                 /** @description Accepted and ignored */
                 cx?: string;
                 q: string;
+                /** @description First result (1-based); start + num - 1 must be at most 100 */
                 start?: number;
                 num?: number;
+                /** @description Country the search is made from */
                 gl?: string;
+                /** @description Interface language */
                 hl?: string;
+                /** @description Only documents in these languages (Google's lr) */
                 lr?: string;
-                safe?: "active" | "off";
+                /** @description Only documents from these countries (Google's cr) */
+                cr?: string;
+                /** @description high and medium are the API's retired levels and mean active */
+                safe?: "active" | "off" | "high" | "medium";
                 dateRestrict?: string;
+                /** @description date (newest first) or date:r:YYYYMMDD:YYYYMMDD (a date range) */
+                sort?: string;
+                /** @description Phrase every result contains */
+                exactTerms?: string;
+                /** @description Word or phrase no result contains */
+                excludeTerms?: string;
+                /** @description Space-separated terms of which each result contains at least one */
+                orTerms?: string;
+                /** @description Terms added to q */
+                hq?: string;
+                fileType?: string;
+                lowRange?: string;
+                highRange?: string;
                 siteSearch?: string;
+                siteSearchFilter?: "e" | "i";
                 searchType?: "image";
+                /** @description Images; Google's sizes are icon, medium and large */
+                imgSize?: "icon" | "small" | "medium" | "large" | "xlarge" | "xxlarge" | "huge";
+                imgType?: "clipart" | "face" | "lineart" | "stock" | "photo" | "animated";
+                imgColorType?: "color" | "gray" | "mono" | "trans";
+                imgDominantColor?: "black" | "blue" | "brown" | "gray" | "green" | "orange" | "pink" | "purple" | "red" | "teal" | "white" | "yellow";
+                /** @description Images; any cc_* value asks for Creative Commons licences */
+                rights?: string;
             };
             header?: never;
             path?: never;
@@ -4256,11 +4352,11 @@ export interface operations {
                     "application/json": components["schemas"]["CSEResponse"];
                 };
             };
-            400: components["responses"]["Error"];
-            401: components["responses"]["Error"];
-            402: components["responses"]["Error"];
-            429: components["responses"]["Error"];
-            503: components["responses"]["Unavailable"];
+            400: components["responses"]["CSEError"];
+            401: components["responses"]["CSEError"];
+            402: components["responses"]["CSEError"];
+            429: components["responses"]["CSEError"];
+            503: components["responses"]["CSEError"];
         };
     };
     rank: {
