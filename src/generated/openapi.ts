@@ -839,11 +839,13 @@ export interface paths {
          * Destinations of Google /goto links a response returned with `link_resolved false`. Free
          * @description Google sometimes holds back where a result leads for longer than a request lasts. Such a
          *     result comes back with `link_resolved: false` and Google's `https://www.google.com/goto?url=…`
-         *     redirect as its `link`. SerpKite goes on following that redirect for up to 2 minutes after
-         *     Google's delay (usually 5-30 s). Send the links here to get their destinations. A `pending`
-         *     link has `retry_after` seconds to wait. Only links SerpKite returned in the last 24 hours are
-         *     known; anything else is `unknown`. Batch jobs and monitor runs already wait for these links
-         *     themselves. Not billed; counts toward the rate limit.
+         *     redirect as its `link`. For batch jobs and monitor runs SerpKite goes on following that
+         *     redirect for up to 2 minutes after Google's delay (usually 5-30 s), and they wait for it
+         *     themselves; send such links here to get their destinations. A `pending` link has
+         *     `retry_after` seconds to wait. Links held back from a live request are not followed after
+         *     the response, so they come back `failed`; repeat the search, or run it as a batch job, to get
+         *     them. Only links SerpKite returned in the last 24 hours are known; anything else is
+         *     `unknown`. Not billed; counts toward the rate limit.
          */
         post: operations["resolve"];
         delete?: never;
@@ -2014,7 +2016,7 @@ export interface components {
             missing_pages?: number[];
             /** @description Present and `true` when Google said it hid results very similar to those shown and ended the results early. Nothing was lost in collection, but Google's answer for this query can differ between requests, so a later request may return more. Such a result is not cached. */
             similar_results_hidden?: boolean;
-            /** @description How many results carry `link_resolved: false` (their `link` is still a Google /goto redirect). Absent when every link is a destination. SerpKite keeps following them after Google's delay: `POST /v1/resolve` returns their destinations, and the response is cached only once all of them resolve. Batch jobs and monitor runs wait for them (up to 2 minutes), so they rarely carry any. */
+            /** @description How many results carry `link_resolved: false` (their `link` is still a Google /goto redirect). Absent when every link is a destination. Such a response is not cached. Batch jobs and monitor runs wait for these links (up to 2 minutes), so they rarely carry any; a live request returns at once, and its held-back links are not followed later. */
             unresolved_links?: number;
             latency_ms?: number;
             llm?: components["schemas"]["LLMUsage"];
