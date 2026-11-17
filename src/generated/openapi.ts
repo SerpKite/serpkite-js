@@ -327,7 +327,14 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Fetch any public URL (HTML or PDF) and return clean Markdown + metadata (1 credit) */
+        /**
+         * Fetch any public URL (HTML or PDF) and return clean Markdown + metadata (1 credit)
+         * @description Fetches the page and returns its main content as Markdown and plain
+         *     text. Pages in any charset (windows-1251, KOI8-R, Latin-1, UTF-16)
+         *     come back as UTF-8: the declared charset is used when the bytes match
+         *     it, otherwise it is detected. `html` (with `include_html`) is decoded
+         *     to UTF-8 too.
+         */
         post: operations["webpage"];
         delete?: never;
         options?: never;
