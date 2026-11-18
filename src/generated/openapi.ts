@@ -1360,6 +1360,8 @@ export interface components {
             fields?: string;
             /** @description Accept a cached answer up to this many seconds old (half price); answers are cached for at most an hour */
             max_age?: number;
+            /** @description Give up after this many milliseconds (default 90000): the request then fails with 503 `upstream_timeout` and costs nothing, so an answer that arrives after your client stopped waiting is not billed. Set it about a second under your client's timeout */
+            timeout_ms?: number;
         };
         ChatGPTRequest: {
             /** @description The message to ChatGPT */
@@ -1381,6 +1383,8 @@ export interface components {
             format?: "json" | "markdown" | "compact";
             fields?: string;
             max_age?: number;
+            /** @description Give up after this many milliseconds (default 90000): the request then fails with 503 `upstream_timeout` and costs nothing, so an answer that arrives after your client stopped waiting is not billed. Set it about a second under your client's timeout */
+            timeout_ms?: number;
         };
         /** @description Brands ("Acme") and domains ("acme.com", subdomains match) to check the answer for; each comes back in `mentions` */
         TrackList: string[];
