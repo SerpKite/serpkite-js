@@ -2649,7 +2649,7 @@ export interface components {
             pairs: {
                 /** @example /v1/ai_mode */
                 endpoint: string;
-                /** @description The request's country (lowercase ISO code) */
+                /** @description The country the requests named (lowercase ISO code), or none for requests that named no country */
                 country: string;
                 requests: number;
                 /** @description Share of requests answered 200 with an answer (0-1); 1 when there were none */
