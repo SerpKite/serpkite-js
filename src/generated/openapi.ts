@@ -877,6 +877,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/status/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * AI answer health for the watched (endpoint, country) pairs over the last 30 minutes; 503 while one is degraded
+         * @description For uptime monitors. A pair is degraded when at least 4 requests in the
+         *     window succeeded less than 80% of the time, or when 2 or more got no
+         *     answer at all. A success is a 200 with an answer: empty answers and 5xx
+         *     count as failures, while 4xx errors are the caller's and are left out.
+         *     When customers are quiet, a canary asks each watched pair, so the
+         *     figure stays current. Both 200 and 503 return the same body.
+         */
+        get: operations["statusAI"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/batches": {
         parameters: {
             query?: never;
@@ -2606,6 +2631,35 @@ export interface components {
                 p50_ms: number;
                 /** @description 95th-percentile latency of successful (non-error) responses; 0 when none succeeded */
                 p95_ms: number;
+            }[];
+        };
+        AIStatus: {
+            /** @enum {string} */
+            status: "operational" | "degraded";
+            window_minutes: number;
+            /** @description Success rate under which a pair with min_requests or more is degraded */
+            degraded_below: number;
+            min_requests: number;
+            /** Format: date-time */
+            updated_at: string;
+            pairs: {
+                /** @example /v1/ai_mode */
+                endpoint: string;
+                /** @description The request's country (lowercase ISO code) */
+                country: string;
+                requests: number;
+                /** @description Share of requests answered 200 with an answer (0-1); 1 when there were none */
+                success_rate: number;
+                /** @description Failed requests by error code, plus `empty` */
+                failures: {
+                    [key: string]: number;
+                };
+                /** @description Upper bound of the latency bucket holding the median answered request */
+                p50_ms: number;
+                p95_ms: number;
+                /** @description Share of requests that took more than 25 s */
+                over_25s: number;
+                degraded: boolean;
             }[];
         };
         BatchCreateRequest: {
@@ -4445,6 +4499,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Status"];
+                };
+            };
+        };
+    };
+    statusAI: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every watched pair is operational */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIStatus"];
+                };
+            };
+            /** @description A watched pair is degraded */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AIStatus"];
                 };
             };
         };
